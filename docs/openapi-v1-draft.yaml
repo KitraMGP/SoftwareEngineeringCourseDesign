@@ -1,0 +1,1495 @@
+openapi: 3.0.3
+info:
+  title: Private Knowledge QA System API
+  version: 0.1.0-draft
+  description: >
+    Draft OpenAPI specification for the V1 private knowledge-base question answering system.
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Users
+  - name: Sessions
+  - name: KnowledgeBases
+  - name: Admin
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Register success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Username or email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with username or email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login success
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: HttpOnly refresh token cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials or frozen account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate refresh token and issue a new access token
+      security:
+        - refreshTokenCookie: []
+      responses:
+        '200':
+          description: Refresh success
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Rotated refresh token cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+        '401':
+          description: Refresh token invalid or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout current session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Users]
+      summary: Update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /users/me/password:
+    put:
+      tags: [Users]
+      summary: Change current user password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '422':
+          description: Invalid old password or new password rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/KeywordParam'
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+    post:
+      tags: [Sessions]
+      summary: Create a new session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSessionResponse'
+        '404':
+          description: Knowledge base not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /sessions/{sessionId}:
+    get:
+      tags: [Sessions]
+      summary: Get session detail with messages
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      responses:
+        '200':
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetailResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Sessions]
+      summary: Soft delete a session
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      responses:
+        '200':
+          description: Session deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+  /sessions/{sessionId}/messages:
+    post:
+      tags: [Sessions]
+      summary: Send a question and stream the answer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageSendRequest'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |-
+                  event: meta
+                  data: {"message_id":"uuid","grounded":true,"model":"deepseek-chat"}
+
+                  event: delta
+                  data: {"content":"System uses"}
+
+                  event: done
+                  data: {"finish_reason":"stop"}
+        '429':
+          description: Quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Upstream model provider error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /sessions/{sessionId}/messages/{messageId}/regenerate:
+    post:
+      tags: [Sessions]
+      summary: Regenerate an existing assistant answer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+        - $ref: '#/components/parameters/MessageIdParam'
+      responses:
+        '200':
+          description: SSE stream for regenerated answer
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |-
+                  event: meta
+                  data: {"message_id":"uuid","grounded":false,"model":"deepseek-chat"}
+
+                  event: delta
+                  data: {"content":"No relevant knowledge found"}
+
+                  event: done
+                  data: {"finish_reason":"stop"}
+        '404':
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /sessions/{sessionId}/stream/stop:
+    post:
+      tags: [Sessions]
+      summary: Stop current streaming task for the session
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionIdParam'
+      responses:
+        '200':
+          description: Stream stop requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+  /knowledge-bases:
+    get:
+      tags: [KnowledgeBases]
+      summary: List knowledge bases
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Knowledge base list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBaseListResponse'
+    post:
+      tags: [KnowledgeBases]
+      summary: Create a knowledge base
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeBaseCreateRequest'
+      responses:
+        '200':
+          description: Knowledge base created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBaseCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /knowledge-bases/{kbId}:
+    get:
+      tags: [KnowledgeBases]
+      summary: Get knowledge base detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+      responses:
+        '200':
+          description: Knowledge base detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeBaseDetailResponse'
+        '404':
+          description: Knowledge base not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [KnowledgeBases]
+      summary: Update knowledge base
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeBaseUpdateRequest'
+      responses:
+        '200':
+          description: Knowledge base updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+    delete:
+      tags: [KnowledgeBases]
+      summary: Soft delete a knowledge base
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+      responses:
+        '200':
+          description: Knowledge base deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+  /knowledge-bases/{kbId}/documents:
+    get:
+      tags: [KnowledgeBases]
+      summary: List documents in a knowledge base
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Document list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListResponse'
+    post:
+      tags: [KnowledgeBases]
+      summary: Upload a document into the knowledge base
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Upload accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentUploadResponse'
+        '409':
+          description: Duplicate document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unsupported file type or file too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /knowledge-bases/{kbId}/documents/{docId}:
+    get:
+      tags: [KnowledgeBases]
+      summary: Get document metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+        - $ref: '#/components/parameters/DocumentIdParam'
+      responses:
+        '200':
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDetailResponse'
+    delete:
+      tags: [KnowledgeBases]
+      summary: Soft delete a document
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+        - $ref: '#/components/parameters/DocumentIdParam'
+      responses:
+        '200':
+          description: Document deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+  /knowledge-bases/{kbId}/reindex:
+    post:
+      tags: [KnowledgeBases]
+      summary: Create a reindex task for the knowledge base
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/KnowledgeBaseIdParam'
+      responses:
+        '200':
+          description: Reindex task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCreateResponse'
+        '409':
+          description: Reindex already in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /admin/provider-configs:
+    get:
+      tags: [Admin]
+      summary: List provider configs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider config list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderConfigListResponse'
+  /admin/provider-configs/{provider}:
+    put:
+      tags: [Admin]
+      summary: Update provider config
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderConfigUpdateRequest'
+      responses:
+        '200':
+          description: Provider config updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+  /admin/settings:
+    get:
+      tags: [Admin]
+      summary: Get system settings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Settings map
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsResponse'
+    put:
+      tags: [Admin]
+      summary: Update system settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemSettingsUpdateRequest'
+      responses:
+        '200':
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+  /admin/tasks:
+    get:
+      tags: [Admin]
+      summary: List tasks
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: task_type
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+  /admin/tasks/{taskId}/retry:
+    post:
+      tags: [Admin]
+      summary: Retry a failed task
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TaskIdParam'
+      responses:
+        '200':
+          description: Retry scheduled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCreateResponse'
+  /admin/quota-policies:
+    get:
+      tags: [Admin]
+      summary: List quota policies
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Quota policy list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaPolicyListResponse'
+  /admin/quota-policies/{policyId}:
+    put:
+      tags: [Admin]
+      summary: Update quota policy
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PolicyIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaPolicyUpdateRequest'
+      responses:
+        '200':
+          description: Quota policy updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccessResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshTokenCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    SizeParam:
+      name: size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    KeywordParam:
+      name: keyword
+      in: query
+      schema:
+        type: string
+    SessionIdParam:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageIdParam:
+      name: messageId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    KnowledgeBaseIdParam:
+      name: kbId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentIdParam:
+      name: docId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TaskIdParam:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PolicyIdParam:
+      name: policyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+      required: [field, reason]
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 40001
+        message:
+          type: string
+          example: validation_failed
+        data:
+          nullable: true
+        request_id:
+          type: string
+          example: req_01HXYZABCDEF
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+      required: [code, message, data, request_id, details]
+    SimpleSuccessResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          type: object
+          additionalProperties: false
+      required: [code, message, data]
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+    RegisterResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          type: object
+          required: [user_id]
+          properties:
+            user_id:
+              type: string
+              format: uuid
+      required: [code, message, data]
+    LoginRequest:
+      type: object
+      required: [account, password]
+      properties:
+        account:
+          type: string
+          description: Username or email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        nickname:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [user, admin]
+        status:
+          type: string
+          enum: [active, frozen]
+        created_at:
+          type: string
+          format: date-time
+      required: [id, username, email, role, status, created_at]
+    LoginResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          required: [access_token, expires_in, user]
+          properties:
+            access_token:
+              type: string
+            expires_in:
+              type: integer
+              example: 1800
+            user:
+              $ref: '#/components/schemas/UserProfile'
+      required: [code, message, data]
+    RefreshTokenResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          required: [access_token, expires_in]
+          properties:
+            access_token:
+              type: string
+            expires_in:
+              type: integer
+      required: [code, message, data]
+    UserProfileResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/UserProfile'
+      required: [code, message, data]
+    UpdateProfileRequest:
+      type: object
+      properties:
+        nickname:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        avatar_url:
+          type: string
+      additionalProperties: false
+    ChangePasswordRequest:
+      type: object
+      required: [old_password, new_password]
+      properties:
+        old_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 128
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+      required: [total, page, size]
+    SessionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        model:
+          type: string
+        knowledge_base_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, model, created_at, updated_at]
+    SessionListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/SessionSummary'
+          required: [total, list]
+      required: [code, message, data]
+    CreateSessionRequest:
+      type: object
+      required: [model]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        model:
+          type: string
+          maxLength: 100
+        knowledge_base_id:
+          type: string
+          format: uuid
+          nullable: true
+    CreateSessionResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          required: [session_id]
+          properties:
+            session_id:
+              type: string
+              format: uuid
+      required: [code, message, data]
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        status:
+          type: string
+          enum: [completed, failed]
+        model_used:
+          type: string
+          nullable: true
+        grounded:
+          type: boolean
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      required: [id, role, content, status, grounded, prompt_tokens, completion_tokens, total_tokens, created_at]
+    SessionDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            session:
+              $ref: '#/components/schemas/SessionSummary'
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatMessage'
+          required: [session, messages]
+      required: [code, message, data]
+    MessageSendRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 12000
+    KnowledgeBaseSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        embedding_model:
+          type: string
+        retrieval_top_k:
+          type: integer
+        similarity_threshold:
+          type: number
+          format: double
+          nullable: true
+        last_indexed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, name, embedding_model, retrieval_top_k, created_at, updated_at]
+    KnowledgeBaseListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/KnowledgeBaseSummary'
+          required: [total, list]
+      required: [code, message, data]
+    KnowledgeBaseCreateRequest:
+      type: object
+      required: [name, embedding_model]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        embedding_model:
+          type: string
+        prompt_template:
+          type: string
+        retrieval_top_k:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 5
+        similarity_threshold:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+    KnowledgeBaseUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        prompt_template:
+          type: string
+        retrieval_top_k:
+          type: integer
+          minimum: 1
+          maximum: 20
+        similarity_threshold:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+      additionalProperties: false
+    KnowledgeBaseCreateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+      required: [code, message, data]
+    KnowledgeBaseDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            knowledge_base:
+              $ref: '#/components/schemas/KnowledgeBaseSummary'
+            document_count:
+              type: integer
+          required: [knowledge_base, document_count]
+      required: [code, message, data]
+    DocumentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+        original_filename:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, processing, available, failed, deleting]
+        chunk_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, status, chunk_count, created_at, updated_at]
+    DocumentListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/DocumentSummary'
+          required: [total, list]
+      required: [code, message, data]
+    DocumentDetailResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/DocumentSummary'
+      required: [code, message, data]
+    DocumentUploadResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          required: [document_id, task_id, status]
+          properties:
+            document_id:
+              type: string
+              format: uuid
+            task_id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [pending]
+      required: [code, message, data]
+    TaskSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        task_type:
+          type: string
+          enum: [document_ingest, knowledge_base_reindex, resource_cleanup]
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [pending, running, succeeded, failed, cancelled]
+        attempt_count:
+          type: integer
+        max_attempts:
+          type: integer
+        next_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_code:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required: [id, task_type, resource_type, status, attempt_count, max_attempts, created_at]
+    TaskCreateResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          required: [task_id]
+          properties:
+            task_id:
+              type: string
+              format: uuid
+      required: [code, message, data]
+    TaskListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaskSummary'
+          required: [total, list]
+      required: [code, message, data]
+    ProviderConfigSummary:
+      type: object
+      properties:
+        provider:
+          type: string
+        base_url:
+          type: string
+        default_chat_model:
+          type: string
+        default_embedding_model:
+          type: string
+        is_enabled:
+          type: boolean
+        api_key_preview:
+          type: string
+      required: [provider, base_url, default_chat_model, default_embedding_model, is_enabled, api_key_preview]
+    ProviderConfigListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProviderConfigSummary'
+          required: [list]
+      required: [code, message, data]
+    ProviderConfigUpdateRequest:
+      type: object
+      required: [base_url, default_chat_model, default_embedding_model, api_key, is_enabled]
+      properties:
+        base_url:
+          type: string
+        default_chat_model:
+          type: string
+        default_embedding_model:
+          type: string
+        api_key:
+          type: string
+        is_enabled:
+          type: boolean
+    SystemSettingsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+      required: [code, message, data]
+    SystemSettingsUpdateRequest:
+      type: object
+      required: [settings]
+      properties:
+        settings:
+          type: object
+          additionalProperties: true
+    QuotaPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scope_type:
+          type: string
+          enum: [system_default, user]
+        scope_id:
+          type: string
+          format: uuid
+          nullable: true
+        daily_total_tokens_limit:
+          type: integer
+          format: int64
+        storage_bytes_limit:
+          type: integer
+          format: int64
+        document_count_limit:
+          type: integer
+        warn_ratio:
+          type: number
+          format: double
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - scope_type
+        - daily_total_tokens_limit
+        - storage_bytes_limit
+        - document_count_limit
+        - warn_ratio
+        - created_at
+        - updated_at
+    QuotaPolicyListResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/QuotaPolicy'
+          required: [list]
+      required: [code, message, data]
+    QuotaPolicyUpdateRequest:
+      type: object
+      required:
+        - daily_total_tokens_limit
+        - storage_bytes_limit
+        - document_count_limit
+        - warn_ratio
+      properties:
+        daily_total_tokens_limit:
+          type: integer
+          format: int64
+          minimum: 1
+        storage_bytes_limit:
+          type: integer
+          format: int64
+          minimum: 1
+        document_count_limit:
+          type: integer
+          minimum: 1
+        warn_ratio:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1
