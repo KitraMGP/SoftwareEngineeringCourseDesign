@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query';
-import { useQueryClient } from '@tanstack/vue-query';
+import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { ArrowRight } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
@@ -16,6 +15,7 @@ import {
   queryKeys,
   useAuthStore
 } from '@private-kb/shared';
+import type { Message } from '@private-kb/shared';
 import { getErrorMessage } from '@private-kb/shared/utils/errors';
 
 import MessageComposer from '../components/MessageComposer.vue';
@@ -29,9 +29,17 @@ const queryClient = useQueryClient();
 const authStore = useAuthStore();
 const chatUiStore = useChatUiStore();
 
+interface ActiveStreamState {
+  kind: 'send' | 'regenerate';
+  userMessage?: UiChatMessage;
+  assistantMessage: UiChatMessage;
+}
+
+type StreamRequestOptions = NonNullable<Parameters<typeof chatApi.streamSessionMessage>[2]>;
+
 const draftInput = ref('');
-const transientMessages = ref<UiChatMessage[]>([]);
-const isStreaming = ref(false);
+const activeStream = ref<ActiveStreamState | null>(null);
+const isStopPending = ref(false);
 const streamAbortController = ref<AbortController | null>(null);
 
 const sessionId = computed(() => String(route.params.sessionId || ''));
@@ -43,69 +51,208 @@ const sessionQuery = useQuery({
 });
 
 const session = computed(() => sessionQuery.data.value?.session || null);
-const canSendMessage = computed(() => !!session.value && !session.value.knowledge_base_id);
+const canSendMessage = computed(() => !!session.value);
+const isKnowledgeBoundSession = computed(() => !!session.value?.knowledge_base_id);
+const isStreaming = computed(() => !!activeStream.value);
+const regeneratingMessageId = computed(() =>
+  activeStream.value?.kind === 'regenerate' ? activeStream.value.assistantMessage.id : null
+);
+
+function getStreamingTag(kind: ActiveStreamState['kind'], stopPending = false) {
+  if (stopPending) {
+    return '正在停止';
+  }
+
+  return kind === 'regenerate' ? '重新生成中' : '生成中';
+}
+
+function mapCitation(message: Message): UiChatMessage['citations'] {
+  if (message.role !== 'assistant' || !message.citations?.length) {
+    return [];
+  }
+
+  return message.citations.map((citation) => ({
+    id: citation.id,
+    title: citation.document_name,
+    documentId: citation.document_id,
+    knowledgeBaseId: citation.knowledge_base_id,
+    rank: citation.rank_no,
+    sourcePage: citation.source_page ?? null
+  }));
+}
+
+function getAssistantTag(message: Message): Pick<UiChatMessage, 'tag' | 'tagTone'> {
+  if (message.role !== 'assistant' || !session.value?.knowledge_base_id) {
+    return {};
+  }
+
+  if (message.grounded) {
+    return {
+      tag: '命中知识库',
+      tagTone: 'success'
+    };
+  }
+
+  return {
+    tag: '未命中知识库',
+    tagTone: 'warning'
+  };
+}
+
+function toUiMessage(message: Message): UiChatMessage {
+  return {
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    grounded: message.grounded,
+    createdAt: message.created_at,
+    citations: mapCitation(message),
+    canRegenerate: message.role === 'assistant' && message.status === 'completed',
+    ...getAssistantTag(message)
+  };
+}
+
+function patchActiveAssistantMessage(updater: (message: UiChatMessage) => UiChatMessage) {
+  if (!activeStream.value) {
+    return;
+  }
+
+  activeStream.value = {
+    ...activeStream.value,
+    assistantMessage: updater(activeStream.value.assistantMessage)
+  };
+}
 
 const persistedMessages = computed<UiChatMessage[]>(() =>
-  (sessionQuery.data.value?.messages ?? []).map((item) => ({
-    id: item.id,
-    role: item.role,
-    content: item.content,
-    grounded: item.grounded,
-    createdAt: item.created_at,
-    tag:
-      item.role === 'assistant' && session.value?.knowledge_base_id && !item.grounded
-        ? '未命中知识库'
-        : undefined
-  }))
+  (sessionQuery.data.value?.messages ?? []).map((item) => toUiMessage(item))
 );
 
 const displayMessages = computed<UiChatMessage[]>(() => {
   if (persistedMessages.value.length) {
-    return [...persistedMessages.value, ...transientMessages.value];
+    if (activeStream.value?.kind === 'send' && activeStream.value.userMessage) {
+      return [
+        ...persistedMessages.value,
+        activeStream.value.userMessage,
+        activeStream.value.assistantMessage
+      ];
+    }
+
+    if (activeStream.value?.kind === 'regenerate') {
+      return persistedMessages.value.map((message) =>
+        message.id === activeStream.value?.assistantMessage.id
+          ? activeStream.value.assistantMessage
+          : message
+      );
+    }
+
+    return persistedMessages.value;
   }
 
-  if (transientMessages.value.length) {
-    return transientMessages.value;
+  if (activeStream.value?.kind === 'send' && activeStream.value.userMessage) {
+    return [activeStream.value.userMessage, activeStream.value.assistantMessage];
   }
 
   return buildPreviewConversation(session.value || undefined);
 });
 
-const capabilityTone = computed<'success' | 'warning'>(() =>
-  canSendMessage.value ? 'success' : 'warning'
-);
+const capabilityTone = computed<'success' | 'info'>(() => (session.value ? 'success' : 'info'));
 
-const capabilityLabel = computed(() =>
-  canSendMessage.value ? '实时问答已接通' : '知识库问答待开放'
-);
+const capabilityLabel = computed(() => {
+  if (!session.value) {
+    return '会话加载中';
+  }
+
+  return isKnowledgeBoundSession.value ? '知识库问答已接通' : '通用问答已接通';
+});
 
 const composerHint = computed(() => {
   if (!session.value) {
     return '';
   }
 
-  if (session.value.knowledge_base_id) {
-    return '当前绑定知识库的会话仍等待检索联调。若要体验实时问答，请新建一个未绑定知识库的空会话。';
-  }
-
   if (isStreaming.value) {
-    return 'Assistant 正在返回内容。当前阶段尚未接入停止生成，请等待这一轮回答完成。';
+    return isStopPending.value
+      ? '正在请求停止本轮生成，请稍候。'
+      : 'Assistant 正在返回内容，你可以点击“停止生成”中断本轮回答。';
   }
 
-  return '当前会话已接入 DeepSeek SSE，可直接提问并查看消息持久化结果。';
+  if (isKnowledgeBoundSession.value) {
+    return '当前会话会先检索知识库；命中资料时会展示引用，未命中时会回退到通用回答。';
+  }
+
+  return '当前会话会直接使用通用模型回答；若需要检索知识库，可先选择知识库再新建会话。';
 });
 
 const composerPlaceholder = computed(() =>
-  canSendMessage.value
-    ? '输入你的问题，按 Ctrl/Command + Enter 发送。'
-    : '当前绑定知识库的会话暂未开放发送，可改为新建空会话体验实时对话。'
+  isKnowledgeBoundSession.value
+    ? '输入你的问题，系统会先检索当前知识库。'
+    : '输入你的问题，按 Ctrl/Command + Enter 发送。'
 );
 
-const composerSubmitLabel = computed(() => (isStreaming.value ? '生成中...' : '发送消息'));
+const composerSubmitLabel = computed(() =>
+  isKnowledgeBoundSession.value ? '发送问题' : '发送消息'
+);
 
 async function refetchSessionState() {
   await queryClient.invalidateQueries({ queryKey: queryKeys.sessionsRoot });
   await sessionQuery.refetch();
+}
+
+async function executeStream(
+  request: (streamOptions: StreamRequestOptions) => Promise<void>,
+  fallbackMessage: string
+) {
+  streamAbortController.value?.abort();
+  const controller = new AbortController();
+  streamAbortController.value = controller;
+  isStopPending.value = false;
+
+  let finishReason = '';
+
+  const streamOptions: StreamRequestOptions = {
+    accessToken: authStore.accessToken,
+    signal: controller.signal,
+    refreshAccessToken: () => authStore.refreshAccessToken(),
+    onUnauthorized: () => authStore.clearAuth(),
+    onMeta: (payload) => {
+      patchActiveAssistantMessage((message) => ({
+        ...message,
+        id: payload.message_id,
+        grounded: payload.grounded
+      }));
+    },
+    onDelta: (payload) => {
+      patchActiveAssistantMessage((message) => ({
+        ...message,
+        content: `${message.content}${payload.content}`
+      }));
+    },
+    onDone: (payload) => {
+      finishReason = payload.finish_reason;
+    }
+  };
+
+  try {
+    await request(streamOptions);
+    await refetchSessionState();
+
+    if (finishReason === 'cancelled') {
+      ElMessage.info('已停止本轮生成。');
+    }
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return;
+    }
+
+    await refetchSessionState();
+    ElMessage.error(getErrorMessage(error, fallbackMessage));
+  } finally {
+    if (streamAbortController.value === controller) {
+      streamAbortController.value = null;
+    }
+    activeStream.value = null;
+    isStopPending.value = false;
+  }
 }
 
 async function handleSubmit() {
@@ -115,8 +262,43 @@ async function handleSubmit() {
     return;
   }
 
-  if (!canSendMessage.value) {
-    ElMessage.warning('当前只有未绑定知识库的空会话支持实时问答。');
+  if (!authStore.accessToken) {
+    ElMessage.error('登录状态已失效，请重新登录后重试。');
+    return;
+  }
+
+  const createdAt = new Date().toISOString();
+  activeStream.value = {
+    kind: 'send',
+    userMessage: {
+      id: `local-user-${Date.now()}`,
+      role: 'user',
+      content,
+      createdAt
+    },
+    assistantMessage: {
+      id: `local-assistant-${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      createdAt,
+      tag: getStreamingTag('send'),
+      tagTone: 'info',
+      citations: [],
+      isStreaming: true,
+      canRegenerate: false
+    }
+  };
+
+  draftInput.value = '';
+  await executeStream(
+    (streamOptions) =>
+      chatApi.streamSessionMessage(sessionId.value, { content }, streamOptions),
+    '消息发送失败，请稍后重试。'
+  );
+}
+
+async function handleRegenerate(messageId: string) {
+  if (!session.value || !sessionId.value || isStreaming.value) {
     return;
   }
 
@@ -125,87 +307,64 @@ async function handleSubmit() {
     return;
   }
 
-  const createdAt = new Date().toISOString();
-  const localUserMessageId = `local-user-${Date.now()}`;
-  let activeAssistantMessageId = `local-assistant-${Date.now()}`;
+  const targetMessage = persistedMessages.value.find(
+    (message) => message.id === messageId && message.role === 'assistant'
+  );
 
-  transientMessages.value = [
-    ...transientMessages.value,
-    {
-      id: localUserMessageId,
-      role: 'user',
-      content,
-      createdAt
-    },
-    {
-      id: activeAssistantMessageId,
-      role: 'assistant',
+  if (!targetMessage) {
+    ElMessage.warning('没有找到可重新生成的回答。');
+    return;
+  }
+
+  activeStream.value = {
+    kind: 'regenerate',
+    assistantMessage: {
+      ...targetMessage,
       content: '',
-      createdAt,
-      tag: '生成中',
-      isStreaming: true
+      citations: [],
+      tag: getStreamingTag('regenerate'),
+      tagTone: 'info',
+      isStreaming: true,
+      canRegenerate: false
     }
-  ];
-
-  draftInput.value = '';
-  isStreaming.value = true;
-
-  streamAbortController.value?.abort();
-  const controller = new AbortController();
-  streamAbortController.value = controller;
-
-  const patchAssistantMessage = (updater: (message: UiChatMessage) => UiChatMessage) => {
-    transientMessages.value = transientMessages.value.map((message) =>
-      message.id === activeAssistantMessageId ? updater(message) : message
-    );
   };
 
+  await executeStream(
+    (streamOptions) =>
+      chatApi.regenerateSessionMessage(sessionId.value, messageId, streamOptions),
+    '重新生成失败，请稍后重试。'
+  );
+}
+
+async function handleStopStream() {
+  if (!sessionId.value || !isStreaming.value || isStopPending.value || !activeStream.value) {
+    return;
+  }
+
+  isStopPending.value = true;
+  patchActiveAssistantMessage((message) => ({
+    ...message,
+    tag: getStreamingTag(activeStream.value?.kind ?? 'send', true)
+  }));
+
   try {
-    await chatApi.streamSessionMessage(
-      sessionId.value,
-      { content },
-      {
-        accessToken: authStore.accessToken,
-        signal: controller.signal,
-        refreshAccessToken: () => authStore.refreshAccessToken(),
-        onUnauthorized: () => authStore.clearAuth(),
-        onMeta: (payload) => {
-          transientMessages.value = transientMessages.value.map((message) =>
-            message.id === activeAssistantMessageId
-              ? {
-                  ...message,
-                  id: payload.message_id,
-                  grounded: payload.grounded
-                }
-              : message
-          );
+    const result = await chatApi.stopSessionStream(sessionId.value);
 
-          activeAssistantMessageId = payload.message_id;
-        },
-        onDelta: (payload) => {
-          patchAssistantMessage((message) => ({
-            ...message,
-            content: `${message.content}${payload.content}`
-          }));
-        }
-      }
-    );
-
-    await refetchSessionState();
-    transientMessages.value = [];
+    if (!result.stopped) {
+      isStopPending.value = false;
+      patchActiveAssistantMessage((message) => ({
+        ...message,
+        tag: getStreamingTag(activeStream.value?.kind ?? 'send')
+      }));
+      ElMessage.info('当前会话没有正在生成的内容。');
+    }
   } catch (error) {
-    if (controller.signal.aborted) {
-      return;
-    }
-
-    await refetchSessionState();
-    transientMessages.value = [];
-    ElMessage.error(getErrorMessage(error, '消息发送失败，请稍后重试。'));
-  } finally {
-    if (streamAbortController.value === controller) {
-      streamAbortController.value = null;
-    }
-    isStreaming.value = false;
+    isStopPending.value = false;
+    patchActiveAssistantMessage((message) => ({
+      ...message,
+      tag: getStreamingTag(activeStream.value?.kind ?? 'send')
+    }));
+    ElMessage.error(getErrorMessage(error, '停止生成失败，请稍后重试。'));
   }
 }
 
@@ -215,8 +374,8 @@ watch(
     if (previousSessionId && nextSessionId !== previousSessionId) {
       streamAbortController.value?.abort();
       streamAbortController.value = null;
-      transientMessages.value = [];
-      isStreaming.value = false;
+      activeStream.value = null;
+      isStopPending.value = false;
       draftInput.value = '';
     }
   }
@@ -288,7 +447,12 @@ onBeforeUnmount(() => {
         </SurfaceCard>
       </div>
 
-      <MessageThread :messages="displayMessages" />
+      <MessageThread
+        :messages="displayMessages"
+        :streaming="isStreaming"
+        :regenerating-message-id="regeneratingMessageId"
+        @regenerate="handleRegenerate"
+      />
 
       <MessageComposer
         v-model="draftInput"
@@ -296,7 +460,10 @@ onBeforeUnmount(() => {
         :hint="composerHint"
         :placeholder="composerPlaceholder"
         :submit-label="composerSubmitLabel"
+        :show-stop-action="isStreaming"
+        :stop-pending="isStopPending"
         @submit="handleSubmit"
+        @stop="handleStopStream"
       />
     </template>
   </div>

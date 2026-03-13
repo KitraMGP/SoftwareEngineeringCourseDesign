@@ -406,3 +406,61 @@
   - 有会话详情页
 - 在桌面端 `1366 x 768` 视口下，两种状态侧栏宽度现均为 `300px`
 - `pnpm --filter @private-kb/user typecheck` 通过
+
+## 2026-03-14 用户端聊天闭环同步到最新后端
+
+### 对照后端新增能力后的前端补齐
+
+- 已根据当前后端真实实现补齐用户端聊天页缺口：
+  - 知识库绑定会话现在可直接发送问题，不再错误提示“待开放”
+  - `GET /sessions/{sessionId}` 返回的 `citations` 已接入前端消息模型
+  - assistant 消息已支持 `重新生成`
+  - 会话生成中已支持 `停止生成`
+- 已同步调整用户端首页、登录页和关于页中的阶段性说明文案
+  - 不再继续展示“知识库问答未开放”的过期描述
+
+### 本轮代码实现
+
+- 共享层：
+  - `packages/shared/src/types/domain.ts` 已补 `MessageCitation`、`StreamStopResult`
+  - `packages/shared/src/api/chat.ts` 已补：
+    - `regenerateSessionMessage`
+    - `stopSessionStream`
+    - 通用 SSE 请求封装
+- 用户端聊天页：
+  - `SessionPage.vue` 现已统一管理发送 / 重生成 / 停止生成三类流式状态
+  - 普通会话与知识库会话统一使用真实后端 SSE
+  - 发送中的按钮会切换为“停止生成”
+  - 重生成会原位覆盖对应 assistant 消息卡片
+  - 知识库命中与未命中会显示不同状态徽标
+- 消息区：
+  - `MessageThread.vue` 已新增 assistant 消息“重新生成”按钮
+  - 已按真实后端字段展示引用来源文档名与页码
+- 输入区：
+  - `MessageComposer.vue` 已支持发送态与停止态切换
+
+### 本轮静态检查
+
+- 已完成 `pnpm --filter @private-kb/user typecheck`
+  - 通过
+- 已完成 `pnpm --filter @private-kb/user build`
+  - 通过
+
+### Firefox MCP 运行时验收
+
+- 已使用真实页面创建新的知识库：
+  - `RAG UI Smoke 1773419000`
+- 已通过页面上传 `txt` 文档并确认状态到达 `available`
+- 已通过页面创建绑定该知识库的新会话
+- 已在知识库会话中发送真实问题，验证结果：
+  - 页面状态条显示“知识库问答已接通”
+  - assistant 消息显示“命中知识库”徽标
+  - 回答下方出现引用来源区域，显示文档 `rag-ui-smoke`
+- 已触发真实 `regenerate` 请求并在浏览器网络面板确认：
+  - `POST /api/v1/sessions/{sessionId}/messages/{messageId}/regenerate`
+  - 返回 `200`
+- 已触发真实 `stream/stop` 请求并确认：
+  - `POST /api/v1/sessions/{sessionId}/stream/stop`
+  - 返回 `200`
+  - 被停止的那一轮消息最终只保留 user 消息，未落库 assistant 回复
+- 本轮浏览器检查未发现新的控制台错误

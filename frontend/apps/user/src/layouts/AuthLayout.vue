@@ -45,7 +45,7 @@ const backgroundImage = computed(
             <div class="rounded-[24px] border border-white/20 bg-white/10 p-5 backdrop-blur">
               <p class="text-xs uppercase tracking-[0.28em] text-white/60">后续扩展</p>
               <p class="mt-3 text-sm leading-6 text-white/84">
-                空会话流式问答已接通，知识库问答、重生成和管理端将沿当前骨架继续接入。
+                普通会话与知识库问答、停止生成和重生成都已接通，管理端会沿当前骨架继续接入。
               </p>
             </div>
           </div>

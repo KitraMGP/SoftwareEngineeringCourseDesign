@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     question: '现在能直接发送问题吗？',
-    answer: '可以，但当前只开放未绑定知识库的空会话实时问答；知识库问答、停止生成和重生成还在后续联调范围内。'
+    answer: '可以。普通会话会直接走通用问答；绑定知识库的会话会先检索资料，并在命中时返回引用来源。assistant 消息也支持停止生成和重新生成。'
   },
   {
     question: 'PDF 为什么可能上传后失败？',
@@ -44,7 +44,7 @@ const faqs = [
           <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Product intro</p>
           <h2 class="mt-4 font-serif text-3xl text-slate-900">{{ ASSISTANT_NAME }}</h2>
           <p class="mt-4 text-sm leading-7 text-slate-500">
-            当前版本已经具备“私有知识库问答系统”的用户端主路径：认证、空会话实时问答、知识库与文档管理、个人中心，以及管理端的独立应用骨架。
+            当前版本已经具备“私有知识库问答系统”的用户端主路径：认证、普通会话与知识库问答、引用展示、知识库与文档管理、个人中心，以及管理端的独立应用骨架。
           </p>
         </SurfaceCard>
 
@@ -84,7 +84,7 @@ const faqs = [
           <div>
             <p class="text-xs uppercase tracking-[0.3em] text-white/45">User app</p>
             <p class="mt-3 text-sm leading-6 text-white/76">
-              登录、空会话实时问答、知识库管理、关于页和个人中心已落入 V1。
+              登录、知识库问答、停止生成、重新生成、知识库管理、关于页和个人中心已落入 V1。
             </p>
           </div>
           <div>

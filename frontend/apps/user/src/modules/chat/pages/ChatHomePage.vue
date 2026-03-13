@@ -51,7 +51,7 @@ watch(
         <p class="text-xs uppercase tracking-[0.36em] text-slate-400">Conversation workspace</p>
         <h1 class="font-serif text-4xl text-slate-900 lg:text-5xl">{{ PRODUCT_NAME }}</h1>
         <p class="mx-auto max-w-2xl text-sm leading-7 text-slate-500 md:text-base">
-          {{ PRODUCT_TAGLINE }}。当前版本已接通会话、知识库管理与空会话实时问答，绑定知识库后的检索式问答仍在联调中。
+          {{ PRODUCT_TAGLINE }}。当前版本已接通会话、知识库管理、知识库检索问答与流式回复，你可以直接从普通会话或绑定知识库的会话开始提问。
         </p>
       </div>
 
@@ -70,7 +70,7 @@ watch(
               {{ chatUiStore.preferredKnowledgeBaseName || '尚未选择知识库' }}
             </p>
             <p class="mt-3 text-sm leading-6 text-slate-500">
-              {{ chatUiStore.preferredKnowledgeBaseName ? '下一次会话将基于所选知识库创建。' : '若先选择知识库，下一次会话会自动带上对应上下文。' }}
+              {{ chatUiStore.preferredKnowledgeBaseName ? '下一次会话会基于所选知识库创建，并在回答中返回引用来源。' : '若先选择知识库，下一次会话会自动带上对应上下文并启用检索式问答。' }}
             </p>
             <button
               type="button"
@@ -86,8 +86,9 @@ watch(
             <ul class="mt-4 space-y-3 text-sm leading-6 text-white/78">
               <li>会话创建、列表和删除已联调</li>
               <li>知识库与文档管理已联调</li>
-              <li>未绑定知识库的空会话已支持流式问答</li>
-              <li>知识库问答、停止生成与重生成仍待接入</li>
+              <li>普通会话与知识库会话都已支持流式问答</li>
+              <li>知识库命中后会在回答下方展示引用来源</li>
+              <li>assistant 消息已支持停止生成与重新生成</li>
             </ul>
           </div>
         </div>

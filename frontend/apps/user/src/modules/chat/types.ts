@@ -1,7 +1,10 @@
 export interface CitationReference {
   id: string;
   title: string;
-  snippet?: string;
+  documentId?: string;
+  knowledgeBaseId?: string;
+  rank?: number;
+  sourcePage?: number | null;
 }
 
 export interface UiChatMessage {
@@ -10,8 +13,10 @@ export interface UiChatMessage {
   content: string;
   createdAt?: string;
   tag?: string;
+  tagTone?: 'info' | 'success' | 'warning' | 'danger';
   citations?: CitationReference[];
   grounded?: boolean;
   isPreview?: boolean;
   isStreaming?: boolean;
+  canRegenerate?: boolean;
 }

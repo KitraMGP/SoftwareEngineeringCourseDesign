@@ -7,6 +7,12 @@ import type { UiChatMessage } from '../types';
 
 const props = defineProps<{
   messages: UiChatMessage[];
+  streaming?: boolean;
+  regeneratingMessageId?: string | null;
+}>();
+
+const emit = defineEmits<{
+  regenerate: [messageId: string];
 }>();
 
 const renderedMessages = computed(() => props.messages);
@@ -58,12 +64,24 @@ watch(
           >
             <div v-if="message.role === 'assistant'" class="mb-3 flex items-center gap-3">
               <p class="text-sm font-semibold text-slate-900">{{ ASSISTANT_NAME }}</p>
-              <AppStatusBadge v-if="message.tag" :tone="message.isStreaming ? 'info' : 'warning'">
+              <AppStatusBadge
+                v-if="message.tag"
+                :tone="message.isStreaming ? 'info' : message.tagTone || 'warning'"
+              >
                 {{ message.tag }}
               </AppStatusBadge>
               <span class="text-xs text-slate-400">
                 {{ formatDateTime(message.createdAt) }}
               </span>
+              <button
+                v-if="message.canRegenerate"
+                type="button"
+                class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                :disabled="streaming"
+                @click="emit('regenerate', message.id)"
+              >
+                {{ regeneratingMessageId === message.id ? '重新生成中...' : '重新生成' }}
+              </button>
             </div>
             <p
               class="whitespace-pre-wrap text-sm leading-7 md:text-[15px]"
@@ -84,8 +102,8 @@ watch(
               class="rounded-[16px] border border-white bg-white px-4 py-3"
             >
               <p class="text-sm font-semibold text-slate-900">{{ citation.title }}</p>
-              <p v-if="citation.snippet" class="mt-1 text-sm leading-6 text-slate-500">
-                {{ citation.snippet }}
+              <p v-if="citation.sourcePage" class="mt-1 text-sm leading-6 text-slate-500">
+                第 {{ citation.sourcePage }} 页
               </p>
             </div>
           </div>

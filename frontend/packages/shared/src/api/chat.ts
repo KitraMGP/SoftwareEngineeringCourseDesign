@@ -8,7 +8,8 @@ import type {
   PaginatedResult,
   SendMessagePayload,
   Session,
-  SessionDetail
+  SessionDetail,
+  StreamStopResult
 } from '../types/domain';
 import type { ApiErrorEnvelope } from '../types/api';
 
@@ -171,6 +172,45 @@ async function consumeEventStream(
   }
 }
 
+async function streamSessionRequest(
+  path: string,
+  options: StreamSessionMessageOptions,
+  body?: string
+): Promise<void> {
+  const doRequest = (token?: string | null) =>
+    fetch(resolveApiUrl(path), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'text/event-stream',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      ...(body ? { body } : {}),
+      signal: options.signal
+    });
+
+  let response = await doRequest(options.accessToken);
+
+  if (response.status === 401 && options.refreshAccessToken) {
+    const nextToken = await options.refreshAccessToken();
+
+    if (nextToken) {
+      response = await doRequest(nextToken);
+    }
+  }
+
+  if (response.status === 401) {
+    options.onUnauthorized?.();
+  }
+
+  if (!response.ok) {
+    throw await readApiError(response);
+  }
+
+  await consumeEventStream(response, options);
+}
+
 export const chatApi = {
   async listSessions(params: { page?: number; size?: number; keyword?: string } = {}) {
     return unwrapData<PaginatedResult<Session>>(await apiClient.get('/sessions', { params }));
@@ -189,38 +229,26 @@ export const chatApi = {
     payload: SendMessagePayload,
     options: StreamSessionMessageOptions = {}
   ): Promise<void> {
-    const doRequest = (token?: string | null) =>
-      fetch(resolveApiUrl(`/sessions/${sessionId}/messages`), {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          Accept: 'text/event-stream',
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(payload),
-        signal: options.signal
-      });
+    await streamSessionRequest(
+      `/sessions/${sessionId}/messages`,
+      options,
+      JSON.stringify(payload)
+    );
+  },
 
-    let response = await doRequest(options.accessToken);
+  async regenerateSessionMessage(
+    sessionId: string,
+    messageId: string,
+    options: StreamSessionMessageOptions = {}
+  ): Promise<void> {
+    await streamSessionRequest(
+      `/sessions/${sessionId}/messages/${messageId}/regenerate`,
+      options
+    );
+  },
 
-    if (response.status === 401 && options.refreshAccessToken) {
-      const nextToken = await options.refreshAccessToken();
-
-      if (nextToken) {
-        response = await doRequest(nextToken);
-      }
-    }
-
-    if (response.status === 401) {
-      options.onUnauthorized?.();
-    }
-
-    if (!response.ok) {
-      throw await readApiError(response);
-    }
-
-    await consumeEventStream(response, options);
+  async stopSessionStream(sessionId: string) {
+    return unwrapData<StreamStopResult>(await apiClient.post(`/sessions/${sessionId}/stream/stop`));
   },
 
   async deleteSession(sessionId: string): Promise<void> {

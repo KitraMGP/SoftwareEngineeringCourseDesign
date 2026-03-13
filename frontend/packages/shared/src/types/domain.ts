@@ -77,6 +77,7 @@ export interface Message {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  citations?: MessageCitation[];
   created_at: string;
   updated_at: string;
 }
@@ -117,6 +118,20 @@ export interface ChatStreamDone {
 export interface ChatStreamError {
   code: number;
   message: string;
+}
+
+export interface StreamStopResult {
+  stopped: boolean;
+}
+
+export interface MessageCitation {
+  id: string;
+  document_chunk_id: string;
+  document_id: string;
+  knowledge_base_id: string;
+  document_name: string;
+  rank_no: number;
+  source_page?: number | null;
 }
 
 export interface KnowledgeBase {
