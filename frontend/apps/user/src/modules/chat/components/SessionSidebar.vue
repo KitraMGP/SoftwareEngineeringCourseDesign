@@ -41,7 +41,7 @@ function sessionTitle(session: Session): string {
 
 <template>
   <aside
-    class="flex h-full w-[88vw] max-w-[320px] flex-col rounded-[32px] border border-white/60 bg-white/72 p-4 shadow-frost backdrop-blur-2xl lg:h-[calc(100vh-3rem)] lg:w-auto"
+    class="flex h-full w-[88vw] max-w-[320px] shrink-0 flex-col rounded-[32px] border border-white/60 bg-white/72 p-4 shadow-frost backdrop-blur-2xl lg:h-[calc(100vh-3rem)]"
     :class="collapsed ? 'lg:w-[108px]' : 'lg:w-[300px]'"
   >
     <div class="flex items-center justify-between gap-3">
@@ -86,13 +86,13 @@ function sessionTitle(session: Session): string {
       </p>
     </div>
 
-    <div class="mt-5 min-h-0 flex-1 overflow-hidden">
+    <div class="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
       <div v-if="!collapsed" class="mb-3 flex items-center justify-between">
         <p class="text-xs uppercase tracking-[0.3em] text-slate-400">最近会话</p>
         <span class="text-xs text-slate-400">{{ sessions.length }} 条</span>
       </div>
 
-      <div class="soft-scrollbar flex h-full flex-col gap-3 overflow-y-auto pr-1">
+      <div class="soft-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
         <div v-if="loading" class="space-y-3">
           <div
             v-for="item in 4"
@@ -163,16 +163,16 @@ function sessionTitle(session: Session): string {
       </div>
     </div>
 
-    <div class="mt-5 space-y-2 border-t border-slate-200/70 pt-4">
+    <div class="mt-3 shrink-0 space-y-1 border-t border-slate-200/70 pt-3">
       <router-link
-        class="flex items-center gap-3 rounded-[18px] px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-white"
+        class="flex items-center gap-3 rounded-[16px] px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
         :to="{ name: 'knowledge-bases' }"
       >
         <el-icon><Collection /></el-icon>
         <span v-if="!collapsed">知识库</span>
       </router-link>
       <router-link
-        class="flex items-center gap-3 rounded-[18px] px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-white"
+        class="flex items-center gap-3 rounded-[16px] px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
         :to="{ name: 'about' }"
       >
         <span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white">
@@ -181,7 +181,7 @@ function sessionTitle(session: Session): string {
         <span v-if="!collapsed">关于</span>
       </router-link>
       <router-link
-        class="flex items-center gap-3 rounded-[18px] px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-white"
+        class="flex items-center gap-3 rounded-[16px] px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
         :to="{ name: 'me-security' }"
       >
         <el-icon><Lock /></el-icon>
@@ -189,10 +189,10 @@ function sessionTitle(session: Session): string {
       </router-link>
 
       <router-link
-        class="mt-3 flex items-center gap-3 rounded-[22px] border border-white/60 bg-white/90 px-4 py-3 text-slate-700 transition hover:bg-white"
+        class="mt-2 flex items-center gap-3 rounded-[20px] border border-white/60 bg-white/90 px-4 py-2 text-slate-700 transition hover:bg-white"
         :to="{ name: 'me-profile' }"
       >
-        <UserAvatar :label="displayName" :avatar-url="avatarUrl" :size="44" />
+        <UserAvatar :label="displayName" :avatar-url="avatarUrl" :size="36" />
         <div v-if="!collapsed" class="min-w-0">
           <p class="truncate text-sm font-semibold text-slate-900">{{ displayName }}</p>
           <p class="text-xs text-slate-400">{{ roleLabel }}</p>
@@ -201,7 +201,7 @@ function sessionTitle(session: Session): string {
 
       <button
         type="button"
-        class="flex items-center gap-3 rounded-[18px] px-4 py-3 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+        class="flex items-center gap-3 rounded-[16px] px-4 py-2 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
         @click="emit('logout')"
       >
         <el-icon><SwitchButton /></el-icon>

@@ -29,7 +29,10 @@ watch(
 </script>
 
 <template>
-  <div ref="containerRef" class="soft-scrollbar flex-1 space-y-6 overflow-y-auto px-5 py-6 lg:px-8">
+  <div
+    ref="containerRef"
+    class="soft-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-6 lg:px-8"
+  >
     <article
       v-for="message in renderedMessages"
       :key="message.id"

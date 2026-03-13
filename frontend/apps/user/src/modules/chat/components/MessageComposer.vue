@@ -28,18 +28,18 @@ function handleKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="border-t border-slate-200/70 px-5 pb-5 pt-4 lg:px-8">
-    <div class="rounded-[28px] border border-white/70 bg-white/88 p-4 shadow-soft">
+  <div class="shrink-0 border-t border-slate-200/70 px-5 pb-4 pt-3 lg:px-8">
+    <div class="rounded-[28px] border border-white/70 bg-white/88 p-3.5 shadow-soft">
       <textarea
         :value="modelValue"
-        rows="5"
+        rows="3"
         :placeholder="placeholder"
-        class="w-full resize-none border-none bg-transparent text-sm leading-7 text-slate-700 outline-none placeholder:text-slate-400"
+        class="max-h-32 min-h-[84px] w-full resize-none overflow-y-auto border-none bg-transparent text-sm leading-6 text-slate-700 outline-none placeholder:text-slate-400"
         :disabled="disabled"
         @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
         @keydown="handleKeydown"
       />
-      <div class="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 md:flex-row md:items-center md:justify-between">
+      <div class="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 md:flex-row md:items-center md:justify-between">
         <p class="text-xs leading-5 text-slate-400">
           {{ hint }}
         </p>

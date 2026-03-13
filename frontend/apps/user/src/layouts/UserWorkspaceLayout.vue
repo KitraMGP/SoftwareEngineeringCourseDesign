@@ -119,7 +119,7 @@ async function handleDeleteSession(sessionId: string) {
   <div class="relative min-h-screen overflow-hidden">
     <div class="user-app-backdrop" />
 
-    <div class="relative z-10 mx-auto flex min-h-screen max-w-[1600px] gap-5 px-4 py-4 lg:px-6 lg:py-6">
+    <div class="relative z-10 mx-auto flex min-h-screen max-w-[1600px] gap-5 px-4 py-4 lg:h-screen lg:min-h-0 lg:px-6 lg:py-6">
       <div class="hidden lg:block">
         <SessionSidebar
           :sessions="sessionsQuery.data.value?.items ?? []"
@@ -139,7 +139,7 @@ async function handleDeleteSession(sessionId: string) {
         />
       </div>
 
-      <main class="relative flex min-h-[calc(100vh-2rem)] flex-1 flex-col overflow-hidden rounded-[32px] border border-white/55 bg-white/55 shadow-frost backdrop-blur-2xl lg:min-h-0">
+      <main class="relative flex min-h-[calc(100vh-2rem)] flex-1 flex-col overflow-hidden rounded-[32px] border border-white/55 bg-white/55 shadow-frost backdrop-blur-2xl lg:min-h-[calc(100vh-3rem)] lg:h-[calc(100vh-3rem)]">
         <div class="flex items-center justify-between border-b border-slate-200/60 px-5 py-4 lg:hidden">
           <button
             type="button"

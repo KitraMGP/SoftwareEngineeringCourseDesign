@@ -228,7 +228,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-1 flex-col">
+  <div class="flex h-full min-h-0 flex-1 flex-col">
     <template v-if="sessionQuery.isError.value">
       <div class="flex h-full items-center justify-center px-5 py-10 lg:px-8">
         <div class="w-full max-w-3xl">
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-      <div class="border-b border-slate-200/70 px-5 py-5 lg:px-8">
+      <div class="shrink-0 border-b border-slate-200/70 px-5 py-5 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p class="text-xs uppercase tracking-[0.32em] text-slate-400">Session overview</p>
