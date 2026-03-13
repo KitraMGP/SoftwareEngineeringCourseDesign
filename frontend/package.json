@@ -1,0 +1,39 @@
+{
+  "name": "private-kb-frontend-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "dev:user": "pnpm --filter @private-kb/user dev",
+    "dev:admin": "pnpm --filter @private-kb/admin dev",
+    "build:user": "pnpm --filter @private-kb/user build",
+    "build:admin": "pnpm --filter @private-kb/admin build",
+    "build": "pnpm build:user && pnpm build:admin",
+    "typecheck:user": "pnpm --filter @private-kb/user typecheck",
+    "typecheck:admin": "pnpm --filter @private-kb/admin typecheck",
+    "typecheck": "pnpm typecheck:user && pnpm typecheck:admin",
+    "lint": "eslint apps packages --ext .ts,.vue",
+    "test": "vitest run",
+    "format": "prettier --write \"**/*.{ts,js,cjs,mjs,json,scss,css,vue,html,md}\""
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.6",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-vue": "^9.31.0",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.49",
+    "prettier": "^3.4.2",
+    "sass": "^1.83.0",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "vue-tsc": "^2.1.10"
+  }
+}

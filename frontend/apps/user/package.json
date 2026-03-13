@@ -1,0 +1,20 @@
+{
+  "name": "@private-kb/user",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vue-tsc --project tsconfig.json --noEmit && vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts",
+    "typecheck": "vue-tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "@private-kb/shared": "workspace:*",
+    "@tanstack/vue-query": "^5.62.7",
+    "element-plus": "^2.9.3",
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  }
+}

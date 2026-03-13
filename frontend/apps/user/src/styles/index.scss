@@ -1,0 +1,62 @@
+@use '@private-kb/shared/styles/index.scss' as *;
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(164, 201, 235, 0.72), transparent 40%),
+    radial-gradient(circle at right 20%, rgba(215, 233, 255, 0.9), transparent 32%),
+    linear-gradient(180deg, #edf4fb 0%, #eef4f2 100%);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.el-form-item__label {
+  color: #44526c !important;
+  font-weight: 600;
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  background: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 0 0 1px rgba(150, 166, 191, 0.28) inset !important;
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  color: #20304d !important;
+}
+
+.el-checkbox__label {
+  color: #52627d;
+}
+
+.user-app-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.55), transparent 18%),
+    radial-gradient(circle at 85% 10%, rgba(196, 227, 255, 0.7), transparent 20%),
+    radial-gradient(circle at 80% 85%, rgba(241, 255, 248, 0.7), transparent 24%);
+}
+
+.chat-message-enter {
+  animation: message-fade 0.45s ease both;
+}
+
+@keyframes message-fade {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
