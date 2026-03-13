@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+.vscode/
+
+backend/.env
+backend/.env.local
+backend/.cache/
+backend/bin/
+backend/coverage.out
+backend/data/
+
+tmp/*.log
+tmp/build/
