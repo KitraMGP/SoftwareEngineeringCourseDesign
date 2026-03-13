@@ -2,6 +2,7 @@ package chat
 
 import (
 	"net/http"
+	"time"
 
 	"backend/internal/platform/auth"
 	"backend/internal/platform/httpx"
@@ -11,7 +12,8 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service           *Service
+	heartbeatInterval time.Duration
 }
 
 type createSessionRequest struct {
@@ -20,8 +22,15 @@ type createSessionRequest struct {
 	KnowledgeBaseID *string `json:"knowledge_base_id"`
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+type sendMessageRequest struct {
+	Content string `json:"content"`
+}
+
+func NewHandler(service *Service, heartbeatInterval time.Duration) *Handler {
+	return &Handler{
+		service:           service,
+		heartbeatInterval: heartbeatInterval,
+	}
 }
 
 func (h *Handler) RegisterRoutes(r chi.Router) {
@@ -127,8 +136,27 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) error {
-	StreamNotImplemented(w)
-	return nil
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		return httpx.Unauthorized("missing auth context")
+	}
+
+	sessionID, err := uuid.Parse(chi.URLParam(r, "sessionId"))
+	if err != nil {
+		return httpx.BadRequest("invalid session id")
+	}
+
+	var req sendMessageRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+
+	stream, err := NewSSEWriter(w, h.heartbeatInterval)
+	if err != nil {
+		return httpx.Internal("failed to initialize sse stream").WithErr(err)
+	}
+
+	return h.service.SendMessageStream(r.Context(), principal.UserID, sessionID, req.Content, stream)
 }
 
 func (h *Handler) RegenerateMessage(w http.ResponseWriter, r *http.Request) error {

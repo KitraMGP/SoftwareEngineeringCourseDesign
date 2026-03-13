@@ -1,6 +1,8 @@
 package httpx
 
 import (
+	"bufio"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -18,6 +20,30 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Flush() {
+	flusher, ok := r.ResponseWriter.(http.Flusher)
+	if !ok {
+		return
+	}
+	flusher.Flush()
+}
+
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("response writer does not support hijacking")
+	}
+	return hijacker.Hijack()
+}
+
+func (r *statusRecorder) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := r.ResponseWriter.(http.Pusher)
+	if !ok {
+		return http.ErrNotSupported
+	}
+	return pusher.Push(target, opts)
 }
 
 func RequestID(next http.Handler) http.Handler {

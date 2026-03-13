@@ -16,6 +16,7 @@ type Config struct {
 	Auth     AuthConfig
 	Task     TaskConfig
 	Storage  StorageConfig
+	AI       AIConfig
 }
 
 type AppConfig struct {
@@ -60,6 +61,18 @@ type StorageConfig struct {
 	MaxUploadBytes int64
 }
 
+type AIConfig struct {
+	Provider             string
+	APIKey               string
+	BaseURL              string
+	DefaultChatModel     string
+	SystemPrompt         string
+	ChatTimeout          time.Duration
+	MaxHistoryMessages   int
+	ChatTemperature      float64
+	SSEHeartbeatInterval time.Duration
+}
+
 func Load() (Config, error) {
 	cfg := Config{
 		App: AppConfig{
@@ -98,6 +111,17 @@ func Load() (Config, error) {
 			LocalRoot:      getEnv("STORAGE_LOCAL_ROOT", "./data/storage"),
 			MaxUploadBytes: getInt64Env("STORAGE_MAX_UPLOAD_BYTES", 20*1024*1024),
 		},
+		AI: AIConfig{
+			Provider:             getEnv("AI_PROVIDER", "deepseek"),
+			APIKey:               strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")),
+			BaseURL:              getEnv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+			DefaultChatModel:     getEnv("AI_DEFAULT_CHAT_MODEL", "deepseek-chat"),
+			SystemPrompt:         getEnv("AI_CHAT_SYSTEM_PROMPT", "You are a helpful assistant."),
+			ChatTimeout:          getDurationEnv("AI_CHAT_TIMEOUT", 60*time.Second),
+			MaxHistoryMessages:   getIntEnv("AI_MAX_HISTORY_MESSAGES", 12),
+			ChatTemperature:      getFloat64Env("AI_CHAT_TEMPERATURE", 0.7),
+			SSEHeartbeatInterval: getDurationEnv("AI_SSE_HEARTBEAT_INTERVAL", 15*time.Second),
+		},
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -135,6 +159,27 @@ func (c Config) Validate() error {
 	}
 	if c.Storage.MaxUploadBytes <= 0 {
 		errs = append(errs, errors.New("STORAGE_MAX_UPLOAD_BYTES must be positive"))
+	}
+	if strings.TrimSpace(c.AI.Provider) == "" {
+		errs = append(errs, errors.New("AI_PROVIDER is required"))
+	}
+	if strings.TrimSpace(c.AI.BaseURL) == "" {
+		errs = append(errs, errors.New("DEEPSEEK_BASE_URL is required"))
+	}
+	if strings.TrimSpace(c.AI.DefaultChatModel) == "" {
+		errs = append(errs, errors.New("AI_DEFAULT_CHAT_MODEL is required"))
+	}
+	if c.AI.ChatTimeout <= 0 {
+		errs = append(errs, errors.New("AI_CHAT_TIMEOUT must be positive"))
+	}
+	if c.AI.MaxHistoryMessages <= 0 {
+		errs = append(errs, errors.New("AI_MAX_HISTORY_MESSAGES must be positive"))
+	}
+	if c.AI.ChatTemperature < 0 || c.AI.ChatTemperature > 2 {
+		errs = append(errs, errors.New("AI_CHAT_TEMPERATURE must be between 0 and 2"))
+	}
+	if c.AI.SSEHeartbeatInterval <= 0 {
+		errs = append(errs, errors.New("AI_SSE_HEARTBEAT_INTERVAL must be positive"))
 	}
 
 	if len(errs) == 0 {
@@ -175,6 +220,19 @@ func getInt64Env(key string, defaultValue int64) int64 {
 	}
 
 	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
+}
+
+func getFloat64Env(key string, defaultValue float64) float64 {
+	value, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(value) == "" {
+		return defaultValue
+	}
+
+	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 	if err != nil {
 		return defaultValue
 	}

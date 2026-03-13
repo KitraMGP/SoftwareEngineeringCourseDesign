@@ -1,9 +1,11 @@
 openapi: 3.0.3
 info:
   title: Private Knowledge QA System API
-  version: 0.1.0-draft
+  version: 0.1.0-current-backend
   description: >
-    Draft OpenAPI specification for the V1 private knowledge-base question answering system.
+    OpenAPI specification synchronized with the current Go backend implementation.
+    This document intentionally reflects the actual runtime behavior, including
+    placeholder SSE responses and endpoints that currently return 501 Not Implemented.
 servers:
   - url: /api/v1
 tags:
@@ -32,11 +34,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RegisterResponse'
         '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ValidationErrorResponse'
         '409':
           description: Username or email already exists
           content:
@@ -66,6 +64,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ValidationErrorResponse'
         '401':
           description: Invalid credentials or frozen account
           content:
@@ -76,8 +76,18 @@ paths:
     post:
       tags: [Auth]
       summary: Rotate refresh token and issue a new access token
+      description: >
+        The current backend first tries to read the refresh token from the
+        `refresh_token` cookie. If the cookie is missing, it then tries to read
+        `refresh_token` from the JSON body.
       security:
         - refreshTokenCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
       responses:
         '200':
           description: Refresh success
@@ -91,7 +101,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RefreshTokenResponse'
         '401':
-          description: Refresh token invalid or expired
+          description: Refresh token missing, invalid, expired, or account frozen
           content:
             application/json:
               schema:
@@ -110,11 +120,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SimpleSuccessResponse'
         '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedResponse'
   /users/me:
     get:
       tags: [Users]
@@ -129,11 +135,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserProfileResponse'
         '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
     put:
       tags: [Users]
       summary: Update current user profile
@@ -153,11 +157,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/SimpleSuccessResponse'
         '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ValidationErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
   /users/me/password:
     put:
       tags: [Users]
@@ -177,12 +181,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimpleSuccessResponse'
-        '422':
-          description: Invalid old password or new password rule violation
+        '400':
+          description: Old password incorrect or new password validation failed
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
   /sessions:
     get:
       tags: [Sessions]
@@ -200,6 +208,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
     post:
       tags: [Sessions]
       summary: Create a new session
@@ -218,12 +228,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateSessionResponse'
+        '400':
+          $ref: '#/components/responses/ValidationErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
         '404':
-          description: Knowledge base not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFoundResponse'
   /sessions/{sessionId}:
     get:
       tags: [Sessions]
@@ -239,12 +249,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionDetailResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
         '404':
-          description: Session not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFoundResponse'
     delete:
       tags: [Sessions]
       summary: Soft delete a session
@@ -259,10 +267,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
   /sessions/{sessionId}/messages:
     post:
       tags: [Sessions]
-      summary: Send a question and stream the answer
+      summary: Stream an assistant reply for a session
+      description: >
+        The backend now supports basic SSE chat for sessions that are not bound
+        to a knowledge base. The current implementation uses DeepSeek as the
+        provider, persists the user and assistant messages, and returns stream
+        events in the order `meta`, `delta`, `done`. Provider failures are
+        emitted as `event: error` inside the stream after the HTTP status has
+        already been set to `200`.
       security:
         - bearerAuth: []
       parameters:
@@ -272,81 +291,63 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MessageSendRequest'
+              $ref: '#/components/schemas/SendMessageRequest'
       responses:
         '200':
-          description: SSE stream
+          description: SSE stream for the assistant reply
           content:
             text/event-stream:
               schema:
                 type: string
                 example: |-
                   event: meta
-                  data: {"message_id":"uuid","grounded":true,"model":"deepseek-chat"}
+                  data: {"message_id":"9f45c628-8a1a-49ea-a714-e8354d4f3fdc","grounded":false,"model":"deepseek-chat"}
 
                   event: delta
-                  data: {"content":"System uses"}
+                  data: {"content":"你好，"}
+
+                  event: delta
+                  data: {"content":"我可以帮你解释这个系统。"}
 
                   event: done
                   data: {"finish_reason":"stop"}
-        '429':
-          description: Quota exceeded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          description: Upstream model provider error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailedResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /sessions/{sessionId}/messages/{messageId}/regenerate:
     post:
       tags: [Sessions]
       summary: Regenerate an existing assistant answer
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/SessionIdParam'
         - $ref: '#/components/parameters/MessageIdParam'
       responses:
-        '200':
-          description: SSE stream for regenerated answer
-          content:
-            text/event-stream:
-              schema:
-                type: string
-                example: |-
-                  event: meta
-                  data: {"message_id":"uuid","grounded":false,"model":"deepseek-chat"}
-
-                  event: delta
-                  data: {"content":"No relevant knowledge found"}
-
-                  event: done
-                  data: {"finish_reason":"stop"}
-        '404':
-          description: Message not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /sessions/{sessionId}/stream/stop:
     post:
       tags: [Sessions]
       summary: Stop current streaming task for the session
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/SessionIdParam'
       responses:
-        '200':
-          description: Stream stop requested
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /knowledge-bases:
     get:
       tags: [KnowledgeBases]
@@ -356,6 +357,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/SizeParam'
+        - $ref: '#/components/parameters/KeywordParam'
       responses:
         '200':
           description: Knowledge base list
@@ -363,6 +365,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/KnowledgeBaseListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
     post:
       tags: [KnowledgeBases]
       summary: Create a knowledge base
@@ -382,11 +386,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/KnowledgeBaseCreateResponse'
         '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ValidationErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
   /knowledge-bases/{kbId}:
     get:
       tags: [KnowledgeBases]
@@ -402,12 +404,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/KnowledgeBaseDetailResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
         '404':
-          description: Knowledge base not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFoundResponse'
     put:
       tags: [KnowledgeBases]
       summary: Update knowledge base
@@ -427,7 +427,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SimpleSuccessResponse'
+                $ref: '#/components/schemas/KnowledgeBaseDetailResponse'
+        '400':
+          $ref: '#/components/responses/ValidationErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
     delete:
       tags: [KnowledgeBases]
       summary: Soft delete a knowledge base
@@ -442,6 +448,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
   /knowledge-bases/{kbId}/documents:
     get:
       tags: [KnowledgeBases]
@@ -459,6 +469,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
     post:
       tags: [KnowledgeBases]
       summary: Upload a document into the knowledge base
@@ -484,6 +496,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentUploadResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
         '409':
           description: Duplicate document
           content:
@@ -492,6 +508,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Unsupported file type or file too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage or task dispatch failure
           content:
             application/json:
               schema:
@@ -512,6 +534,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentDetailResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
     delete:
       tags: [KnowledgeBases]
       summary: Soft delete a document
@@ -527,6 +553,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
   /knowledge-bases/{kbId}/reindex:
     post:
       tags: [KnowledgeBases]
@@ -542,154 +572,254 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TaskCreateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
         '409':
           description: Reindex already in progress
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+    post:
+      tags: [Admin]
+      summary: Create user
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+  /admin/users/{userId}:
+    put:
+      tags: [Admin]
+      summary: Update user
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+  /admin/users/{userId}/password:
+    put:
+      tags: [Admin]
+      summary: Reset user password
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+  /admin/users/{userId}/freeze:
+    post:
+      tags: [Admin]
+      summary: Freeze user
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+  /admin/users/{userId}/unfreeze:
+    post:
+      tags: [Admin]
+      summary: Unfreeze user
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/provider-configs:
     get:
       tags: [Admin]
       summary: List provider configs
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       responses:
-        '200':
-          description: Provider config list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderConfigListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/provider-configs/{provider}:
     put:
       tags: [Admin]
       summary: Update provider config
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProviderConfigUpdateRequest'
+        - $ref: '#/components/parameters/ProviderParam'
       responses:
-        '200':
-          description: Provider config updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/settings:
     get:
       tags: [Admin]
       summary: Get system settings
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       responses:
-        '200':
-          description: Settings map
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SystemSettingsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
     put:
       tags: [Admin]
       summary: Update system settings
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SystemSettingsUpdateRequest'
       responses:
-        '200':
-          description: Settings updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/tasks:
     get:
       tags: [Admin]
       summary: List tasks
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-        - name: status
-          in: query
-          schema:
-            type: string
-        - name: task_type
-          in: query
-          schema:
-            type: string
       responses:
-        '200':
-          description: Task list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TaskListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/tasks/{taskId}/retry:
     post:
       tags: [Admin]
-      summary: Retry a failed task
+      summary: Retry task
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TaskIdParam'
       responses:
-        '200':
-          description: Retry scheduled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TaskCreateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: List audit logs
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/quota-policies:
     get:
       tags: [Admin]
       summary: List quota policies
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       responses:
-        '200':
-          description: Quota policy list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/QuotaPolicyListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
   /admin/quota-policies/{policyId}:
     put:
       tags: [Admin]
       summary: Update quota policy
+      description: This endpoint currently returns 501 Not Implemented.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/PolicyIdParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/QuotaPolicyUpdateRequest'
       responses:
-        '200':
-          description: Quota policy updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SimpleSuccessResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
+  /admin/usage/users/{userId}:
+    get:
+      tags: [Admin]
+      summary: Get user usage
+      description: This endpoint currently returns 501 Not Implemented.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserIdParam'
+      responses:
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '501':
+          $ref: '#/components/responses/FeatureNotReadyResponse'
 components:
   securitySchemes:
     bearerAuth:
@@ -763,34 +893,78 @@ components:
       schema:
         type: string
         format: uuid
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProviderParam:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    UnauthorizedResponse:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenResponse:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundResponse:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationErrorResponse:
+      description: Validation failed or request body invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FeatureNotReadyResponse:
+      description: Feature not implemented in the current backend
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     ErrorDetail:
       type: object
       properties:
         field:
           type: string
-        reason:
+        message:
           type: string
-      required: [field, reason]
+      required: [field, message]
     ErrorResponse:
       type: object
       properties:
         code:
           type: integer
-          example: 40001
+          example: 40000
         message:
           type: string
-          example: validation_failed
+          example: validation failed
         data:
           nullable: true
         request_id:
           type: string
-          example: req_01HXYZABCDEF
+          example: 9b2daeed-adae-42ea-9ce2-7e60f22e9308
         details:
           type: array
           items:
             $ref: '#/components/schemas/ErrorDetail'
-      required: [code, message, data, request_id, details]
+      required: [code, message, data]
     SimpleSuccessResponse:
       type: object
       properties:
@@ -807,28 +981,22 @@ components:
     RegisterRequest:
       type: object
       required: [username, email, password]
+      additionalProperties: false
       properties:
         username:
           type: string
-          minLength: 3
-          maxLength: 50
         email:
           type: string
           format: email
-          maxLength: 320
         password:
           type: string
-          minLength: 8
-          maxLength: 128
     RegisterResponse:
       type: object
       properties:
         code:
           type: integer
-          example: 0
         message:
           type: string
-          example: ok
         data:
           type: object
           required: [user_id]
@@ -840,15 +1008,43 @@ components:
     LoginRequest:
       type: object
       required: [account, password]
+      additionalProperties: false
       properties:
         account:
           type: string
-          description: Username or email
         password:
           type: string
-          minLength: 8
-          maxLength: 128
-    UserProfile:
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        refresh_token:
+          type: string
+    LoginUserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        nickname:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [user, admin]
+        status:
+          type: string
+          enum: [active, frozen]
+      required: [id, username, email, role, status]
+    CurrentUserProfile:
       type: object
       properties:
         id:
@@ -874,7 +1070,10 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, username, email, role, status, created_at]
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, username, email, role, status, created_at, updated_at]
     LoginResponse:
       type: object
       properties:
@@ -890,9 +1089,8 @@ components:
               type: string
             expires_in:
               type: integer
-              example: 1800
             user:
-              $ref: '#/components/schemas/UserProfile'
+              $ref: '#/components/schemas/LoginUserSummary'
       required: [code, message, data]
     RefreshTokenResponse:
       type: object
@@ -918,45 +1116,34 @@ components:
         message:
           type: string
         data:
-          $ref: '#/components/schemas/UserProfile'
+          $ref: '#/components/schemas/CurrentUserProfile'
       required: [code, message, data]
     UpdateProfileRequest:
       type: object
+      additionalProperties: false
       properties:
         nickname:
           type: string
-          maxLength: 100
-        email:
-          type: string
-          format: email
-          maxLength: 320
+          nullable: true
         avatar_url:
           type: string
-      additionalProperties: false
+          nullable: true
     ChangePasswordRequest:
       type: object
       required: [old_password, new_password]
+      additionalProperties: false
       properties:
         old_password:
           type: string
         new_password:
           type: string
-          minLength: 8
-          maxLength: 128
-    Pagination:
-      type: object
-      properties:
-        total:
-          type: integer
-        page:
-          type: integer
-        size:
-          type: integer
-      required: [total, page, size]
     SessionSummary:
       type: object
       properties:
         id:
+          type: string
+          format: uuid
+        user_id:
           type: string
           format: uuid
         name:
@@ -968,13 +1155,30 @@ components:
           type: string
           format: uuid
           nullable: true
+        knowledge_base_name:
+          type: string
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-      required: [id, model, created_at, updated_at]
+      required: [id, user_id, model, created_at, updated_at]
+    SessionListData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+      required: [items, total, page, size]
     SessionListResponse:
       type: object
       properties:
@@ -983,30 +1187,29 @@ components:
         message:
           type: string
         data:
-          type: object
-          properties:
-            total:
-              type: integer
-            list:
-              type: array
-              items:
-                $ref: '#/components/schemas/SessionSummary'
-          required: [total, list]
+          $ref: '#/components/schemas/SessionListData'
       required: [code, message, data]
     CreateSessionRequest:
       type: object
-      required: [model]
+      additionalProperties: false
       properties:
         name:
           type: string
-          maxLength: 200
+          nullable: true
         model:
           type: string
-          maxLength: 100
+          description: Optional. If omitted, the backend uses `AI_DEFAULT_CHAT_MODEL`.
         knowledge_base_id:
           type: string
           format: uuid
           nullable: true
+    SendMessageRequest:
+      type: object
+      required: [content]
+      additionalProperties: false
+      properties:
+        content:
+          type: string
     CreateSessionResponse:
       type: object
       properties:
@@ -1028,9 +1231,16 @@ components:
         id:
           type: string
           format: uuid
+        session_id:
+          type: string
+          format: uuid
         role:
           type: string
           enum: [user, assistant]
+        reply_to_message_id:
+          type: string
+          format: uuid
+          nullable: true
         content:
           type: string
         status:
@@ -1050,7 +1260,31 @@ components:
         created_at:
           type: string
           format: date-time
-      required: [id, role, content, status, grounded, prompt_tokens, completion_tokens, total_tokens, created_at]
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - session_id
+        - role
+        - content
+        - status
+        - grounded
+        - prompt_tokens
+        - completion_tokens
+        - total_tokens
+        - created_at
+        - updated_at
+    SessionDetailData:
+      type: object
+      properties:
+        session:
+          $ref: '#/components/schemas/SessionSummary'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+      required: [session, messages]
     SessionDetailResponse:
       type: object
       properties:
@@ -1059,28 +1293,15 @@ components:
         message:
           type: string
         data:
-          type: object
-          properties:
-            session:
-              $ref: '#/components/schemas/SessionSummary'
-            messages:
-              type: array
-              items:
-                $ref: '#/components/schemas/ChatMessage'
-          required: [session, messages]
+          $ref: '#/components/schemas/SessionDetailData'
       required: [code, message, data]
-    MessageSendRequest:
-      type: object
-      required: [content]
-      properties:
-        content:
-          type: string
-          minLength: 1
-          maxLength: 12000
-    KnowledgeBaseSummary:
+    KnowledgeBase:
       type: object
       properties:
         id:
+          type: string
+          format: uuid
+        user_id:
           type: string
           format: uuid
         name:
@@ -1090,6 +1311,9 @@ components:
           nullable: true
         embedding_model:
           type: string
+        prompt_template:
+          type: string
+          nullable: true
         retrieval_top_k:
           type: integer
         similarity_threshold:
@@ -1106,7 +1330,21 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, name, embedding_model, retrieval_top_k, created_at, updated_at]
+      required: [id, user_id, name, embedding_model, retrieval_top_k, created_at, updated_at]
+    KnowledgeBaseListData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeBase'
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+      required: [items, total, page, size]
     KnowledgeBaseListResponse:
       type: object
       properties:
@@ -1115,60 +1353,50 @@ components:
         message:
           type: string
         data:
-          type: object
-          properties:
-            total:
-              type: integer
-            list:
-              type: array
-              items:
-                $ref: '#/components/schemas/KnowledgeBaseSummary'
-          required: [total, list]
+          $ref: '#/components/schemas/KnowledgeBaseListData'
       required: [code, message, data]
     KnowledgeBaseCreateRequest:
       type: object
       required: [name, embedding_model]
+      additionalProperties: false
       properties:
         name:
           type: string
-          minLength: 1
-          maxLength: 200
         description:
           type: string
+          nullable: true
         embedding_model:
           type: string
         prompt_template:
           type: string
+          nullable: true
         retrieval_top_k:
           type: integer
-          minimum: 1
-          maximum: 20
           default: 5
         similarity_threshold:
           type: number
           format: double
-          minimum: 0
-          maximum: 1
+          nullable: true
     KnowledgeBaseUpdateRequest:
       type: object
+      required: [name]
+      additionalProperties: false
       properties:
         name:
           type: string
-          maxLength: 200
         description:
           type: string
+          nullable: true
         prompt_template:
           type: string
+          nullable: true
         retrieval_top_k:
           type: integer
-          minimum: 1
-          maximum: 20
+          default: 5
         similarity_threshold:
           type: number
           format: double
-          minimum: 0
-          maximum: 1
-      additionalProperties: false
+          nullable: true
     KnowledgeBaseCreateResponse:
       type: object
       properties:
@@ -1178,9 +1406,9 @@ components:
           type: string
         data:
           type: object
-          required: [id]
+          required: [knowledge_base_id]
           properties:
-            id:
+            knowledge_base_id:
               type: string
               format: uuid
       required: [code, message, data]
@@ -1192,20 +1420,21 @@ components:
         message:
           type: string
         data:
-          type: object
-          properties:
-            knowledge_base:
-              $ref: '#/components/schemas/KnowledgeBaseSummary'
-            document_count:
-              type: integer
-          required: [knowledge_base, document_count]
+          $ref: '#/components/schemas/KnowledgeBase'
       required: [code, message, data]
-    DocumentSummary:
+    Document:
       type: object
       properties:
         id:
           type: string
           format: uuid
+        knowledge_base_id:
+          type: string
+          format: uuid
+        file_id:
+          type: string
+          format: uuid
+          nullable: true
         title:
           type: string
           nullable: true
@@ -1215,6 +1444,11 @@ components:
         status:
           type: string
           enum: [pending, processing, available, failed, deleting]
+        error_message:
+          type: string
+          nullable: true
+        content_length:
+          type: integer
         chunk_count:
           type: integer
         created_at:
@@ -1223,7 +1457,28 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, status, chunk_count, created_at, updated_at]
+      required:
+        - id
+        - knowledge_base_id
+        - status
+        - content_length
+        - chunk_count
+        - created_at
+        - updated_at
+    DocumentListData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+      required: [items, total, page, size]
     DocumentListResponse:
       type: object
       properties:
@@ -1232,15 +1487,7 @@ components:
         message:
           type: string
         data:
-          type: object
-          properties:
-            total:
-              type: integer
-            list:
-              type: array
-              items:
-                $ref: '#/components/schemas/DocumentSummary'
-          required: [total, list]
+          $ref: '#/components/schemas/DocumentListData'
       required: [code, message, data]
     DocumentDetailResponse:
       type: object
@@ -1250,7 +1497,7 @@ components:
         message:
           type: string
         data:
-          $ref: '#/components/schemas/DocumentSummary'
+          $ref: '#/components/schemas/Document'
       required: [code, message, data]
     DocumentUploadResponse:
       type: object
@@ -1273,50 +1520,6 @@ components:
               type: string
               enum: [pending]
       required: [code, message, data]
-    TaskSummary:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        task_type:
-          type: string
-          enum: [document_ingest, knowledge_base_reindex, resource_cleanup]
-        resource_type:
-          type: string
-        resource_id:
-          type: string
-          format: uuid
-          nullable: true
-        status:
-          type: string
-          enum: [pending, running, succeeded, failed, cancelled]
-        attempt_count:
-          type: integer
-        max_attempts:
-          type: integer
-        next_run_at:
-          type: string
-          format: date-time
-          nullable: true
-        started_at:
-          type: string
-          format: date-time
-          nullable: true
-        finished_at:
-          type: string
-          format: date-time
-          nullable: true
-        error_code:
-          type: string
-          nullable: true
-        error_message:
-          type: string
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-      required: [id, task_type, resource_type, status, attempt_count, max_attempts, created_at]
     TaskCreateResponse:
       type: object
       properties:
@@ -1332,164 +1535,3 @@ components:
               type: string
               format: uuid
       required: [code, message, data]
-    TaskListResponse:
-      type: object
-      properties:
-        code:
-          type: integer
-        message:
-          type: string
-        data:
-          type: object
-          properties:
-            total:
-              type: integer
-            list:
-              type: array
-              items:
-                $ref: '#/components/schemas/TaskSummary'
-          required: [total, list]
-      required: [code, message, data]
-    ProviderConfigSummary:
-      type: object
-      properties:
-        provider:
-          type: string
-        base_url:
-          type: string
-        default_chat_model:
-          type: string
-        default_embedding_model:
-          type: string
-        is_enabled:
-          type: boolean
-        api_key_preview:
-          type: string
-      required: [provider, base_url, default_chat_model, default_embedding_model, is_enabled, api_key_preview]
-    ProviderConfigListResponse:
-      type: object
-      properties:
-        code:
-          type: integer
-        message:
-          type: string
-        data:
-          type: object
-          properties:
-            list:
-              type: array
-              items:
-                $ref: '#/components/schemas/ProviderConfigSummary'
-          required: [list]
-      required: [code, message, data]
-    ProviderConfigUpdateRequest:
-      type: object
-      required: [base_url, default_chat_model, default_embedding_model, api_key, is_enabled]
-      properties:
-        base_url:
-          type: string
-        default_chat_model:
-          type: string
-        default_embedding_model:
-          type: string
-        api_key:
-          type: string
-        is_enabled:
-          type: boolean
-    SystemSettingsResponse:
-      type: object
-      properties:
-        code:
-          type: integer
-        message:
-          type: string
-        data:
-          type: object
-          additionalProperties: true
-      required: [code, message, data]
-    SystemSettingsUpdateRequest:
-      type: object
-      required: [settings]
-      properties:
-        settings:
-          type: object
-          additionalProperties: true
-    QuotaPolicy:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        scope_type:
-          type: string
-          enum: [system_default, user]
-        scope_id:
-          type: string
-          format: uuid
-          nullable: true
-        daily_total_tokens_limit:
-          type: integer
-          format: int64
-        storage_bytes_limit:
-          type: integer
-          format: int64
-        document_count_limit:
-          type: integer
-        warn_ratio:
-          type: number
-          format: double
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - scope_type
-        - daily_total_tokens_limit
-        - storage_bytes_limit
-        - document_count_limit
-        - warn_ratio
-        - created_at
-        - updated_at
-    QuotaPolicyListResponse:
-      type: object
-      properties:
-        code:
-          type: integer
-        message:
-          type: string
-        data:
-          type: object
-          properties:
-            list:
-              type: array
-              items:
-                $ref: '#/components/schemas/QuotaPolicy'
-          required: [list]
-      required: [code, message, data]
-    QuotaPolicyUpdateRequest:
-      type: object
-      required:
-        - daily_total_tokens_limit
-        - storage_bytes_limit
-        - document_count_limit
-        - warn_ratio
-      properties:
-        daily_total_tokens_limit:
-          type: integer
-          format: int64
-          minimum: 1
-        storage_bytes_limit:
-          type: integer
-          format: int64
-          minimum: 1
-        document_count_limit:
-          type: integer
-          minimum: 1
-        warn_ratio:
-          type: number
-          format: double
-          exclusiveMinimum: 0
-          exclusiveMaximum: 1

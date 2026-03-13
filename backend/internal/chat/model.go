@@ -39,6 +39,19 @@ type CreateSessionInput struct {
 	KnowledgeBaseID *uuid.UUID
 }
 
+type CreateMessageInput struct {
+	ID               uuid.UUID
+	Role             string
+	ReplyToMessageID *uuid.UUID
+	Content          string
+	Status           string
+	ModelUsed        *string
+	Grounded         bool
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+}
+
 type ListSessionsResult struct {
 	Items []Session `json:"items"`
 	Total int       `json:"total"`
@@ -49,4 +62,10 @@ type ListSessionsResult struct {
 type SessionDetail struct {
 	Session  Session   `json:"session"`
 	Messages []Message `json:"messages"`
+}
+
+type StreamMeta struct {
+	MessageID uuid.UUID `json:"message_id"`
+	Grounded  bool      `json:"grounded"`
+	Model     string    `json:"model"`
 }

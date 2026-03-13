@@ -63,7 +63,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	chatHandler := chat.NewHandler(chat.NewService(chat.NewRepository(pool)))
+	chatService := chat.NewService(
+		chat.NewRepository(pool),
+		chat.NewProvider(cfg.AI),
+		chat.ServiceConfig{
+			DefaultModel:       cfg.AI.DefaultChatModel,
+			SystemPrompt:       cfg.AI.SystemPrompt,
+			RequestTimeout:     cfg.AI.ChatTimeout,
+			MaxHistoryMessages: cfg.AI.MaxHistoryMessages,
+			Temperature:        cfg.AI.ChatTemperature,
+		},
+	)
+
+	chatHandler := chat.NewHandler(chatService, cfg.AI.SSEHeartbeatInterval)
 	kbHandler := kb.NewHandler(kb.NewService(kb.NewRepository(pool), taskService, storageService, cfg.Storage.MaxUploadBytes))
 	adminHandler := admin.NewHandler()
 

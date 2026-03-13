@@ -33,7 +33,7 @@
 ## 关键实现策略
 
 - 认证模块优先实现真实数据库读写，不先做 mock。
-- SSE 问答、文档上传、解析、向量检索和实际 worker 消费留到后续阶段；本轮先放好接口和占位逻辑。
+- 第一阶段先优先完成账户、会话、知识库和任务骨架；聊天主链路和文档处理后续再逐步补齐。
 - `sqlc` 暂不在第一阶段引入，先用 `pgx` 手写 repository，把模块边界和接口先稳定下来；后续如需要再平滑切到 `sqlc`。
 
 ## 进行中
@@ -65,12 +65,13 @@
   - 会话列表
   - 会话详情
   - 删除会话
-  - SSE 发消息 / 重生成 / 中断接口先返回占位
+  - 无知识库场景下的 SSE 发消息
+  - 重生成 / 中断接口暂未实现
 - 已完成知识库模块基础能力：
   - 知识库 CRUD
   - 文档列表 / 文档详情 / 删除
   - 重建索引任务创建
-  - 上传接口先返回占位
+  - 文档上传
 - 已完成任务模块第一阶段：
   - 通用任务模型
   - 创建 reindex / cleanup 任务
@@ -92,7 +93,6 @@
 
 - PDF 解析器接入
 - 真实 embedding、向量检索、引用记录
-- SSE 流式回答主链路
 - 消息重生成与中断
 - 管理后台真实业务接口
 - 审计、配额统计、provider 配置和系统参数管理
@@ -101,7 +101,7 @@
 ## 下一阶段推荐顺序
 
 1. 接入真实 embedding provider，替换当前占位零向量
-2. 打通向量检索 + SSE 问答主链路
+2. 打通向量检索，把当前普通聊天扩展为 RAG 问答
 3. 完成 PDF 解析与引用记录
 4. 最后补 admin / quota / audit / settings
 
@@ -219,3 +219,127 @@
   - reindex 任务：`a3188b85-4b77-4981-a46d-1de4b2995c7d`
   - 轮询状态：`pending -> pending -> pending -> pending -> pending -> succeeded`
   - 数据库确认该文档已有 `2` 条 `document_ingest` 任务记录，最终文档状态仍为 `available`
+
+## 2026-03-13 OpenAPI 同步
+
+- 已根据当前后端实现重写 `docs/openapi-v1-draft.yaml`
+- 本次同步原则：以后端真实行为为准，而不是设计草案中的目标状态
+- 已修正的重点包括：
+  - 列表接口从 `data.list` 改为当前后端真实返回的 `data.items`
+  - 知识库创建、详情、更新等接口的响应结构已改为当前后端真实结构
+  - `PUT /users/me` 请求体已移除当前后端不支持的 `email`
+  - 登录响应中的 `user` 结构已改为当前后端真实字段集合
+  - 会话消息 SSE 接口描述会随着真实实现继续同步
+  - 管理端接口已标注为当前返回 `501 Not Implemented`
+  - 错误详情字段从 `reason` 改为当前后端真实字段 `message`
+- 已使用本地 YAML 解析器校验通过
+
+## 2026-03-13 当前阶段判断
+
+- 当前后端可以视为完成了“基础业务骨架 + 文档入库异步链路”阶段
+- 已真实可用的能力：
+  - 认证与当前用户
+  - 会话基础 CRUD
+  - 知识库 CRUD
+  - 文档上传、去重、入库、删除、重建索引
+  - worker 异步任务消费与清理
+- 已验证状态：
+  - `go test ./...` 与 `go build ./...` 通过
+  - 本地 API + worker 联调冒烟通过
+  - OpenAPI 草案已同步到当前后端实现
+- 当前后端最关键的未完成部分已经从“工程骨架”转为“RAG 主链路能力”：
+  - 真实 embedding
+  - pgvector 检索
+  - SSE 流式问答
+  - 消息重生成 / 中断
+  - PDF 解析
+- 如果按课程设计可演示优先级推进，推荐下一阶段顺序：
+  1. 实现真实 embedding 与检索
+  2. 打通聊天问答主链路
+  3. 补 PDF
+  4. 最后补 admin / audit / quota / settings
+
+## 2026-03-13 无知识库聊天阶段
+
+- 已按当前优先级切换到“先做基础 AI 聊天，再继续完整文档问答”的路线
+- 已完成的聊天能力：
+  - `POST /api/v1/sessions/{sessionId}/messages` 不再是占位接口
+  - 已接入 DeepSeek Chat Completions 流式接口
+  - 后端向前端输出真实 SSE 事件：`meta`、`delta`、`done`
+  - 当前用户消息与 assistant 回复都会写入 `messages`
+  - 聊天上下文会带最近若干条历史消息
+  - SSE 心跳已加入，默认 `15s`
+- 当前范围限制：
+  - 仅支持 `knowledge_base_id IS NULL` 的普通会话
+  - 若会话绑定知识库，发送消息会返回 `501`
+  - `regenerate` 与 `stream/stop` 仍然保持未实现
+- 新增环境变量：
+  - `AI_PROVIDER`
+  - `DEEPSEEK_API_KEY`
+  - `DEEPSEEK_BASE_URL`
+  - `AI_DEFAULT_CHAT_MODEL`
+  - `AI_CHAT_SYSTEM_PROMPT`
+  - `AI_CHAT_TIMEOUT`
+  - `AI_MAX_HISTORY_MESSAGES`
+  - `AI_CHAT_TEMPERATURE`
+  - `AI_SSE_HEARTBEAT_INTERVAL`
+- 本轮本地验证已通过：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+  - `cd backend && GOCACHE=/tmp/go-build go build ./...`
+- 本轮未做真实联网调用验证：
+  - 因为当前执行环境没有配置可用的 `DEEPSEEK_API_KEY`
+  - DeepSeek provider 通过了本地无网络单元测试，验证了请求组装、流式解析和错误映射
+
+## 2026-03-13 SSE 联调问题修复
+
+- 真实 `curl` 联调已跑到聊天接口
+- 暴露出一个后端缺陷：
+  - `POST /api/v1/sessions/{sessionId}/messages` 返回 `500 failed to initialize sse stream`
+  - 根因是 `httpx.Logger` 中间件中的 `statusRecorder` 包装了 `ResponseWriter`，但没有继续实现 `http.Flusher`
+  - 这会导致 SSE 初始化阶段对 `http.Flusher` 的类型断言失败
+- 已完成修复：
+  - 为 `statusRecorder` 补充 `Flush`
+  - 顺手补充 `Hijack` / `Push` 透传，避免继续破坏底层 writer 能力
+  - 新增 `backend/internal/platform/httpx/middleware_test.go` 回归测试
+- 修复后本地验证已通过：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+  - `cd backend && GOCACHE=/tmp/go-build go build ./...`
+- 注意：
+  - 要继续验证真实聊天流，需要用户重启当前 `run-api`
+
+## 2026-03-13 DeepSeek 聊天真实联调通过
+
+- 在修复 `http.Flusher` 透传问题并重启 API 后，已完成真实 `curl` 联调
+- 联调路径：
+  - 注册新用户
+  - 登录获取 access token
+  - 创建未绑定知识库的普通会话
+  - 调用 `POST /api/v1/sessions/{sessionId}/messages`
+  - 再调用 `GET /api/v1/sessions/{sessionId}` 校验消息持久化
+- 本次测试数据：
+  - 用户：`390ba885-4606-4c0f-84f8-8377aacb6d85`
+  - 会话：`ed21c2b6-1a54-4882-ba36-fb415621e4e5`
+  - assistant 消息：`55cd70eb-1cff-40ed-a25e-24b4b8f3ebf0`
+- 已确认结果：
+  - SSE 返回顺序正确：`meta -> delta -> done`
+  - `meta.message_id` 与最终入库的 assistant 消息 ID 一致
+  - 会话详情中消息数为 `2`
+  - assistant 消息已落库，`status = completed`
+  - `model_used = deepseek-chat`
+  - token 用量已写入：
+    - `prompt_tokens = 21`
+    - `completion_tokens = 37`
+    - `total_tokens = 58`
+- 本轮可以确认：
+  - “无知识库基础 AI 聊天 + DeepSeek API” 已经是可运行状态
+
+## 2026-03-13 最小联调文档补充
+
+- 已在 `backend/README.md` 中新增“最小联调示例”
+- 内容覆盖：
+  - 注册
+  - 登录
+  - 创建普通会话
+  - `curl -N` 调用 SSE 聊天
+  - 回查会话详情确认消息落库
+- 该示例用于前后端联调和课程演示时快速验证当前 DeepSeek 聊天能力

@@ -169,6 +169,64 @@ func (r *Repository) Delete(ctx context.Context, userID, sessionID uuid.UUID) er
 	return nil
 }
 
+func (r *Repository) CreateMessage(ctx context.Context, userID, sessionID uuid.UUID, input CreateMessageInput) (*Message, error) {
+	messageID := input.ID
+	if messageID == uuid.Nil {
+		messageID = uuid.New()
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin create message tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
+		UPDATE sessions
+		SET updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
+		  AND user_id = $2
+		  AND deleted_at IS NULL
+		RETURNING id
+	`, sessionID, userID)
+
+	var guardedSessionID uuid.UUID
+	if err := row.Scan(&guardedSessionID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("guard session before create message: %w", err)
+	}
+
+	messageRow := tx.QueryRow(ctx, `
+		INSERT INTO messages (
+			id,
+			session_id,
+			role,
+			reply_to_message_id,
+			content,
+			status,
+			model_used,
+			grounded,
+			prompt_tokens,
+			completion_tokens,
+			total_tokens
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id, session_id, role, reply_to_message_id, content, status, model_used, grounded, prompt_tokens, completion_tokens, total_tokens, created_at, updated_at
+	`, messageID, guardedSessionID, input.Role, nullableUUID(input.ReplyToMessageID), input.Content, input.Status, normalizeOptionalString(input.ModelUsed), input.Grounded, input.PromptTokens, input.CompletionTokens, input.TotalTokens)
+
+	message, err := scanMessage(messageRow)
+	if err != nil {
+		return nil, fmt.Errorf("insert message: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit create message tx: %w", err)
+	}
+	return message, nil
+}
+
 func scanSession(row pgx.Row) (*Session, error) {
 	var (
 		session         Session

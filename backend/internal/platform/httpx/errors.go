@@ -6,19 +6,23 @@ import (
 )
 
 const (
-	CodeValidationFailed   = 40000
-	CodeInvalidCredentials = 40001
-	CodeUnauthorized       = 40100
-	CodeForbidden          = 40300
-	CodeResourceNotFound   = 40400
-	CodeConflict           = 40900
-	CodeDuplicateDocument  = 40903
-	CodeUnsupportedType    = 42201
-	CodeFileTooLarge       = 42202
-	CodeFeatureNotReady    = 50100
-	CodeInternal           = 50000
-	CodeStorageError       = 50003
-	CodeTaskDispatchFailed = 50004
+	CodeValidationFailed    = 40000
+	CodePromptTooLarge      = 40002
+	CodeInvalidCredentials  = 40001
+	CodeUnauthorized        = 40100
+	CodeForbidden           = 40300
+	CodeResourceNotFound    = 40400
+	CodeConflict            = 40900
+	CodeDuplicateDocument   = 40903
+	CodeUnsupportedType     = 42201
+	CodeFileTooLarge        = 42202
+	CodeFeatureNotReady     = 50100
+	CodeInternal            = 50000
+	CodeStorageError        = 50003
+	CodeTaskDispatchFailed  = 50004
+	CodeProviderUnavailable = 50301
+	CodeProviderAuthFailed  = 50302
+	CodeProviderRateLimited = 50303
 )
 
 type FieldError struct {
