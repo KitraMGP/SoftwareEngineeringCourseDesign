@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"backend/internal/kb"
+	"backend/internal/model"
 	"backend/internal/platform/config"
 	"backend/internal/platform/db"
 	"backend/internal/platform/storage"
@@ -43,8 +44,9 @@ func main() {
 		logger.Error("failed to initialize storage", slog.Any("error", err))
 		os.Exit(1)
 	}
+	embeddingProvider := model.NewEmbeddingProvider(cfg.AI)
 
-	worker := worker.New(logger, taskService, kbRepo, storageService, cfg.Task.PollInterval)
+	worker := worker.New(logger, taskService, kbRepo, storageService, embeddingProvider, cfg.AI.EmbeddingTimeout, cfg.Task.PollInterval)
 
 	runCtx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

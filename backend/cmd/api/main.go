@@ -14,11 +14,13 @@ import (
 	"backend/internal/admin"
 	"backend/internal/chat"
 	"backend/internal/kb"
+	"backend/internal/model"
 	"backend/internal/platform/auth"
 	"backend/internal/platform/config"
 	"backend/internal/platform/db"
 	"backend/internal/platform/httpx"
 	"backend/internal/platform/storage"
+	"backend/internal/rag"
 	"backend/internal/task"
 
 	"github.com/go-chi/chi/v5"
@@ -62,9 +64,14 @@ func main() {
 		logger.Error("failed to initialize storage", slog.Any("error", err))
 		os.Exit(1)
 	}
-
-	chatService := chat.NewService(
-		chat.NewRepository(pool),
+	embeddingProvider := model.NewEmbeddingProvider(cfg.AI)
+	ragService := rag.NewService(rag.NewRepository(pool), embeddingProvider, rag.ServiceConfig{
+		MaxContextChunks: cfg.AI.RAGMaxContextChunks,
+	})
+	chatRepo := chat.NewRepository(pool)
+	chatService := chat.NewServiceWithRAG(
+		chatRepo,
+		ragService,
 		chat.NewProvider(cfg.AI),
 		chat.ServiceConfig{
 			DefaultModel:       cfg.AI.DefaultChatModel,

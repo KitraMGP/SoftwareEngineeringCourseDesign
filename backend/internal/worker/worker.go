@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"backend/internal/kb"
+	"backend/internal/model"
 	"backend/internal/platform/httpx"
 	"backend/internal/platform/storage"
 	"backend/internal/task"
@@ -22,6 +23,8 @@ type Worker struct {
 	taskService  *task.Service
 	kbRepo       *kb.Repository
 	storage      storage.Service
+	embedder     model.EmbeddingProvider
+	embedTimeout time.Duration
 	pollInterval time.Duration
 }
 
@@ -35,12 +38,17 @@ func (e *processingError) Error() string {
 	return e.Message
 }
 
-func New(logger *slog.Logger, taskService *task.Service, kbRepo *kb.Repository, storageService storage.Service, pollInterval time.Duration) *Worker {
+func New(logger *slog.Logger, taskService *task.Service, kbRepo *kb.Repository, storageService storage.Service, embedder model.EmbeddingProvider, embedTimeout, pollInterval time.Duration) *Worker {
+	if embedTimeout <= 0 {
+		embedTimeout = 20 * time.Second
+	}
 	return &Worker{
 		logger:       logger,
 		taskService:  taskService,
 		kbRepo:       kbRepo,
 		storage:      storageService,
+		embedder:     embedder,
+		embedTimeout: embedTimeout,
 		pollInterval: pollInterval,
 	}
 }
@@ -166,6 +174,14 @@ func (w *Worker) processDocumentIngest(ctx context.Context, taskItem *task.Task)
 			Message:   "document content could not be chunked",
 			Retryable: false,
 		})
+	}
+
+	embeddingModel, err := w.kbRepo.GetEmbeddingModelForKnowledgeBase(ctx, source.KnowledgeBaseID)
+	if err != nil {
+		return w.retryOrFailDocumentIngest(ctx, taskItem, documentID, classifyError(err))
+	}
+	if err := w.embedChunks(ctx, embeddingModel, chunks); err != nil {
+		return w.retryOrFailDocumentIngest(ctx, taskItem, documentID, classifyEmbeddingError(err))
 	}
 
 	if err := w.kbRepo.ReplaceDocumentContent(ctx, documentID, content, chunks); err != nil {
@@ -308,6 +324,13 @@ func classifyError(err error) *processingError {
 	if err == nil {
 		return nil
 	}
+	if errors.Is(err, kb.ErrNotFound) {
+		return &processingError{
+			Code:      "resource_not_found",
+			Message:   "knowledge base or document not found",
+			Retryable: false,
+		}
+	}
 
 	var ingestErr *kb.IngestError
 	if errors.As(err, &ingestErr) {
@@ -323,6 +346,83 @@ func classifyError(err error) *processingError {
 		Message:   err.Error(),
 		Retryable: true,
 	}
+}
+
+func classifyEmbeddingError(err error) *processingError {
+	if err == nil {
+		return nil
+	}
+
+	providerErr, ok := model.AsProviderError(err)
+	if !ok {
+		return classifyError(err)
+	}
+
+	result := &processingError{
+		Code:      "embedding_provider_error",
+		Message:   providerErr.Message,
+		Retryable: true,
+	}
+	switch providerErr.Kind {
+	case model.ProviderErrorMisconfigured, model.ProviderErrorAuthFailed, model.ProviderErrorBadRequest:
+		result.Retryable = false
+	case model.ProviderErrorRateLimited, model.ProviderErrorUnavailable:
+		result.Retryable = true
+	}
+	return result
+}
+
+func (w *Worker) embedChunks(ctx context.Context, embeddingModel string, chunks []kb.DocumentChunkInput) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	if w.embedder == nil {
+		return &model.ProviderError{
+			Kind:    model.ProviderErrorMisconfigured,
+			Message: "embedding provider is not configured",
+		}
+	}
+
+	const batchSize = 16
+	for start := 0; start < len(chunks); start += batchSize {
+		end := start + batchSize
+		if end > len(chunks) {
+			end = len(chunks)
+		}
+
+		texts := make([]string, 0, end-start)
+		for idx := start; idx < end; idx++ {
+			texts = append(texts, chunks[idx].Content)
+		}
+
+		batchCtx, cancel := context.WithTimeout(ctx, w.embedTimeout)
+		result, err := w.embedder.Embed(batchCtx, model.EmbeddingRequest{
+			Model: embeddingModel,
+			Texts: texts,
+		})
+		cancel()
+		if err != nil {
+			return err
+		}
+		if len(result.Vectors) != len(texts) {
+			return &model.ProviderError{
+				Kind:    model.ProviderErrorUnavailable,
+				Message: "embedding provider returned an unexpected batch size",
+			}
+		}
+
+		for offset, vector := range result.Vectors {
+			if len(vector) != model.EmbeddingDimension {
+				return &model.ProviderError{
+					Kind:    model.ProviderErrorBadRequest,
+					Message: "embedding dimension mismatch",
+				}
+			}
+			chunks[start+offset].Embedding = model.FormatVector(vector)
+		}
+	}
+	return nil
 }
 
 func retryDelay(attempt int) time.Duration {

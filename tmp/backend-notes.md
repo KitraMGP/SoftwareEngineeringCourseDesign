@@ -343,3 +343,163 @@
   - `curl -N` 调用 SSE 聊天
   - 回查会话详情确认消息落库
 - 该示例用于前后端联调和课程演示时快速验证当前 DeepSeek 聊天能力
+
+## 2026-03-13 当前状态复核
+
+- 当前仓库后端相关工作区状态干净，未发现新的后端未提交改动
+- 再次执行通过：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- 当前后端完成度判断：
+  - 已完成“账户认证 + 会话基础 + 知识库基础 CRUD + 文档上传/异步入库 + 无知识库 DeepSeek 流式聊天”
+  - 已具备课程演示所需的基础后端主干
+  - 尚未完成的核心能力仍集中在“知识库问答主链路”和“管理侧真实业务”
+- 当前最重要未完成项：
+  - 知识库绑定会话下的 RAG 聊天
+  - 真实 embedding 与 pgvector 检索
+  - 聊天 `regenerate` / `stream/stop`
+  - PDF 解析
+  - admin / audit / quota / settings 真实实现
+
+## 2026-03-13 知识库会话 RAG 聊天实现完成
+
+- 已完成 `POST /api/v1/sessions/{sessionId}/messages` 的知识库会话分支：
+  - 会话绑定知识库时会先执行检索，再调用聊天模型
+  - 命中知识库上下文时，SSE `meta.grounded = true`
+  - 未命中时会自动回退为通用回答，SSE `meta.grounded = false`
+- 已完成 RAG 检索链路：
+  - 生成查询 embedding
+  - 在 `document_chunks` 上执行 `pgvector` 检索
+  - 应用知识库级 `retrieval_top_k` / `similarity_threshold`
+  - 将命中的 chunk 拼装到模型提示词中
+- 已完成 assistant 引用落库：
+  - `message_citations` 会在 assistant 消息创建时一并写入
+  - `GET /api/v1/sessions/{sessionId}` 的消息详情已新增 `citations`
+- 已完成文档入库向量化：
+  - worker 在 `document_ingest` 时不再写入零向量占位
+  - 默认 embedding provider 改为本地 `local_hash`
+  - 该 provider 生成与查询统一的 `1536` 维确定性向量，适合本地开发和课程演示
+  - 同时已预留 `openai_compatible` embedding provider，可通过环境变量切换为远程真实 embedding 服务
+- 新增/更新环境变量：
+  - `AI_EMBEDDING_PROVIDER`
+  - `AI_EMBEDDING_API_KEY`
+  - `AI_EMBEDDING_BASE_URL`
+  - `AI_EMBEDDING_TIMEOUT`
+  - `AI_RAG_MAX_CONTEXT_CHUNKS`
+- 已同步文档：
+  - `backend/.env.example`
+  - `backend/README.md`
+  - `docs/openapi-v1-draft.yaml`
+- 本轮本地验证已通过：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+  - `cd backend && GOCACHE=/tmp/go-build go build ./...`
+  - `python -c 'import yaml; yaml.safe_load(open("docs/openapi-v1-draft.yaml", "r", encoding="utf-8")); print("openapi yaml ok")'`
+
+## 2026-03-13 当前剩余重点
+
+- `POST /api/v1/sessions/{sessionId}/messages/{messageId}/regenerate`
+- `POST /api/v1/sessions/{sessionId}/stream/stop`
+- PDF 解析
+- 若课程演示需要更高检索质量，可将 `AI_EMBEDDING_PROVIDER` 切换为 `openai_compatible` 并配置远程 embedding 服务
+- admin / audit / quota / settings 真实业务实现
+
+## 2026-03-13 知识库 RAG curl 冒烟测试通过
+
+- 测试路径：
+  - `GET /api/v1/healthz`
+  - `POST /api/v1/auth/register`
+  - `POST /api/v1/auth/login`
+  - `POST /api/v1/knowledge-bases`
+  - `POST /api/v1/knowledge-bases/{kbId}/documents`
+  - `GET /api/v1/knowledge-bases/{kbId}/documents/{docId}`
+  - `POST /api/v1/sessions`
+  - `POST /api/v1/sessions/{sessionId}/messages`
+  - `GET /api/v1/sessions/{sessionId}`
+- 本轮测试数据：
+  - 用户：`dff03018-4f7b-4d29-b3b4-38e3e657196a`
+  - 用户名：`rag_smoke_1773414882`
+  - 知识库：`c61603cf-e67b-4b43-b78c-712b512230c6`
+  - 文档：`80616db0-1c22-4170-9d6d-c6352191fbdd`
+  - 入库任务：`3a742bea-a9bb-461b-b171-f5cce900d193`
+  - 会话：`9bd2e79b-2f4c-42e1-8b42-070cb6973610`
+  - assistant 消息：`7e5c3b21-1b34-4a46-b01f-cb2492a6798c`
+- 已确认结果：
+  - 文档状态已到 `available`
+  - SSE 首个事件：
+    - `meta.message_id = 7e5c3b21-1b34-4a46-b01f-cb2492a6798c`
+    - `meta.grounded = true`
+    - `meta.model = deepseek-chat`
+  - SSE 后续正常输出 `delta`，最终收到 `done`
+  - assistant 回复成功落库，且 `grounded = true`
+  - assistant 消息已写入引用：
+    - `document_chunk_id = 25cc96d6-1530-46ce-94b3-2f30944a6292`
+    - `document_id = 80616db0-1c22-4170-9d6d-c6352191fbdd`
+    - `document_name = rag-smoke`
+    - `rank_no = 1`
+  - token 用量已写入：
+    - `prompt_tokens = 155`
+    - `completion_tokens = 60`
+    - `total_tokens = 215`
+
+## 2026-03-13 聊天闭环第二阶段完成
+
+- 已完成 `POST /api/v1/sessions/{sessionId}/messages/{messageId}/regenerate`
+  - 返回 `text/event-stream`
+  - 复用原 user 消息重新执行检索与生成
+  - 覆盖原 assistant 消息内容、token 用量和 `message_citations`
+  - SSE `meta.message_id` 等于原 assistant 消息 ID
+- 已完成 `POST /api/v1/sessions/{sessionId}/stream/stop`
+  - 返回 `{"stopped": true|false}`
+  - 若成功停止活跃流，不会落库不完整 assistant 答案
+- 已为聊天模块补充流生命周期管理：
+  - 同一会话同一时刻只允许一个活跃生成任务
+  - 若同一会话已有活跃流，再次发送消息或重生成会返回 `409`
+  - 主动 stop 时，原 SSE 会收到 `done.finish_reason = cancelled`
+- 已同步更新：
+  - `backend/README.md`
+  - `docs/openapi-v1-draft.yaml`
+- 本轮本地验证已通过：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+  - `cd backend && GOCACHE=/tmp/go-build go build ./...`
+  - OpenAPI YAML 解析通过
+
+## 2026-03-13 当前剩余重点（更新）
+
+- PDF 解析
+- 若课程演示需要更高检索质量，可将 `AI_EMBEDDING_PROVIDER` 切换为 `openai_compatible`
+- admin / audit / quota / settings 真实业务实现
+- quota / audit 统计落库
+
+## 2026-03-13 regenerate / stop curl 冒烟测试通过
+
+- 本轮测试用户：
+  - 用户：`0fc03aa0-765d-4f08-a0c2-45d7cfb22414`
+  - 用户名：`regen_stop_smoke_1773416143`
+- 本轮测试资源：
+  - 知识库：`cffe0e2d-bee3-42bc-86b2-db4187821639`
+  - 文档：`46b8dc9a-47ea-4128-b2e9-a9ecfeba2fec`
+  - 知识库会话：`0a072f79-4e4c-4e6a-a904-6e881e073267`
+  - 普通会话：`2ec21a31-3079-451e-84e6-467f9eeb57f4`
+- `regenerate` 测试结果：
+  - 原 assistant 消息：`d78a3173-665b-43e1-8446-d705aaaaf2b9`
+  - `POST /api/v1/sessions/{sessionId}/messages/{messageId}/regenerate` 返回 SSE
+  - `meta.message_id` 与原 assistant 消息 ID 一致
+  - 回查会话详情后，assistant 仍是同一条消息 ID，但内容和 `updated_at` 已更新
+  - 引用仍存在：
+    - `document_chunk_id = 379099ef-f171-4aeb-b641-51ac2580e788`
+    - `document_id = 46b8dc9a-47ea-4128-b2e9-a9ecfeba2fec`
+    - `document_name = chat-stage3-smoke`
+  - 更新后的 token 用量：
+    - `prompt_tokens = 152`
+    - `completion_tokens = 162`
+    - `total_tokens = 314`
+- `stream/stop` 测试结果：
+  - 第一次 stop 测试时，正在生成的 assistant 消息 ID：`c4be7d3c-012d-4cac-9e50-cb58897095ea`
+  - `POST /api/v1/sessions/{sessionId}/stream/stop` 返回 `{"stopped":true}`
+  - 原 SSE 最终收到 `done.finish_reason = cancelled`
+  - 回查会话详情后，仅有 user 消息，无 assistant 消息落库
+- 并发互斥测试结果：
+  - 第二次长生成过程中，assistant 临时消息 ID：`9ec29afa-cd79-434d-abf3-77152275c988`
+  - 在该流未结束时再次 `POST /api/v1/sessions/{sessionId}/messages`
+  - 后端返回 `409`
+  - 错误消息：`a message is already being generated for this session`
+  - 随后调用 `stream/stop` 成功停止该流，且回查会话详情仍未产生 assistant 落库

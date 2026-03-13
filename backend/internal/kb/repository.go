@@ -381,6 +381,24 @@ func (r *Repository) GetDocumentIngestSource(ctx context.Context, documentID uui
 	return &source, nil
 }
 
+func (r *Repository) GetEmbeddingModelForKnowledgeBase(ctx context.Context, knowledgeBaseID uuid.UUID) (string, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT embedding_model
+		FROM knowledge_bases
+		WHERE id = $1
+		  AND deleted_at IS NULL
+	`, knowledgeBaseID)
+
+	var embeddingModel string
+	if err := row.Scan(&embeddingModel); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("get knowledge base embedding model: %w", err)
+	}
+	return embeddingModel, nil
+}
+
 func (r *Repository) MarkDocumentProcessing(ctx context.Context, documentID uuid.UUID) error {
 	return r.setDocumentState(ctx, documentID, "processing", nil)
 }

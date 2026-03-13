@@ -160,9 +160,46 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) RegenerateMessage(w http.ResponseWriter, r *http.Request) error {
-	return httpx.FeatureNotReady("message regeneration will be implemented in the next phase")
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		return httpx.Unauthorized("missing auth context")
+	}
+
+	sessionID, err := uuid.Parse(chi.URLParam(r, "sessionId"))
+	if err != nil {
+		return httpx.BadRequest("invalid session id")
+	}
+	messageID, err := uuid.Parse(chi.URLParam(r, "messageId"))
+	if err != nil {
+		return httpx.BadRequest("invalid message id")
+	}
+
+	stream, err := NewSSEWriter(w, h.heartbeatInterval)
+	if err != nil {
+		return httpx.Internal("failed to initialize sse stream").WithErr(err)
+	}
+
+	return h.service.RegenerateMessageStream(r.Context(), principal.UserID, sessionID, messageID, stream)
 }
 
 func (h *Handler) StopStream(w http.ResponseWriter, r *http.Request) error {
-	return httpx.FeatureNotReady("stream stopping will be implemented in the next phase")
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		return httpx.Unauthorized("missing auth context")
+	}
+
+	sessionID, err := uuid.Parse(chi.URLParam(r, "sessionId"))
+	if err != nil {
+		return httpx.BadRequest("invalid session id")
+	}
+
+	stopped, err := h.service.StopStream(r.Context(), principal.UserID, sessionID)
+	if err != nil {
+		return err
+	}
+
+	httpx.Success(w, http.StatusOK, map[string]any{
+		"stopped": stopped,
+	})
+	return nil
 }

@@ -71,6 +71,11 @@ type AIConfig struct {
 	MaxHistoryMessages   int
 	ChatTemperature      float64
 	SSEHeartbeatInterval time.Duration
+	EmbeddingProvider    string
+	EmbeddingAPIKey      string
+	EmbeddingBaseURL     string
+	EmbeddingTimeout     time.Duration
+	RAGMaxContextChunks  int
 }
 
 func Load() (Config, error) {
@@ -121,6 +126,11 @@ func Load() (Config, error) {
 			MaxHistoryMessages:   getIntEnv("AI_MAX_HISTORY_MESSAGES", 12),
 			ChatTemperature:      getFloat64Env("AI_CHAT_TEMPERATURE", 0.7),
 			SSEHeartbeatInterval: getDurationEnv("AI_SSE_HEARTBEAT_INTERVAL", 15*time.Second),
+			EmbeddingProvider:    getEnv("AI_EMBEDDING_PROVIDER", "local_hash"),
+			EmbeddingAPIKey:      firstNonEmpty(strings.TrimSpace(os.Getenv("AI_EMBEDDING_API_KEY")), strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))),
+			EmbeddingBaseURL:     firstNonEmpty(strings.TrimSpace(os.Getenv("AI_EMBEDDING_BASE_URL")), strings.TrimSpace(os.Getenv("DEEPSEEK_BASE_URL")), "https://api.deepseek.com"),
+			EmbeddingTimeout:     getDurationEnv("AI_EMBEDDING_TIMEOUT", 20*time.Second),
+			RAGMaxContextChunks:  getIntEnv("AI_RAG_MAX_CONTEXT_CHUNKS", 5),
 		},
 	}
 
@@ -180,6 +190,18 @@ func (c Config) Validate() error {
 	}
 	if c.AI.SSEHeartbeatInterval <= 0 {
 		errs = append(errs, errors.New("AI_SSE_HEARTBEAT_INTERVAL must be positive"))
+	}
+	if strings.TrimSpace(c.AI.EmbeddingProvider) == "" {
+		errs = append(errs, errors.New("AI_EMBEDDING_PROVIDER is required"))
+	}
+	if strings.TrimSpace(c.AI.EmbeddingBaseURL) == "" && strings.TrimSpace(c.AI.EmbeddingProvider) != "local_hash" {
+		errs = append(errs, errors.New("AI_EMBEDDING_BASE_URL is required when AI_EMBEDDING_PROVIDER is not local_hash"))
+	}
+	if c.AI.EmbeddingTimeout <= 0 {
+		errs = append(errs, errors.New("AI_EMBEDDING_TIMEOUT must be positive"))
+	}
+	if c.AI.RAGMaxContextChunks <= 0 {
+		errs = append(errs, errors.New("AI_RAG_MAX_CONTEXT_CHUNKS must be positive"))
 	}
 
 	if len(errs) == 0 {
@@ -263,4 +285,13 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		return defaultValue
 	}
 	return parsed
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

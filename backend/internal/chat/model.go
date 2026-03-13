@@ -18,19 +18,30 @@ type Session struct {
 }
 
 type Message struct {
-	ID               uuid.UUID  `json:"id"`
-	SessionID        uuid.UUID  `json:"session_id"`
-	Role             string     `json:"role"`
-	ReplyToMessageID *uuid.UUID `json:"reply_to_message_id,omitempty"`
-	Content          string     `json:"content"`
-	Status           string     `json:"status"`
-	ModelUsed        *string    `json:"model_used,omitempty"`
-	Grounded         bool       `json:"grounded"`
-	PromptTokens     int        `json:"prompt_tokens"`
-	CompletionTokens int        `json:"completion_tokens"`
-	TotalTokens      int        `json:"total_tokens"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID               uuid.UUID         `json:"id"`
+	SessionID        uuid.UUID         `json:"session_id"`
+	Role             string            `json:"role"`
+	ReplyToMessageID *uuid.UUID        `json:"reply_to_message_id,omitempty"`
+	Content          string            `json:"content"`
+	Status           string            `json:"status"`
+	ModelUsed        *string           `json:"model_used,omitempty"`
+	Grounded         bool              `json:"grounded"`
+	PromptTokens     int               `json:"prompt_tokens"`
+	CompletionTokens int               `json:"completion_tokens"`
+	TotalTokens      int               `json:"total_tokens"`
+	Citations        []MessageCitation `json:"citations,omitempty"`
+	CreatedAt        time.Time         `json:"created_at"`
+	UpdatedAt        time.Time         `json:"updated_at"`
+}
+
+type MessageCitation struct {
+	ID              uuid.UUID `json:"id"`
+	DocumentChunkID uuid.UUID `json:"document_chunk_id"`
+	DocumentID      uuid.UUID `json:"document_id"`
+	KnowledgeBaseID uuid.UUID `json:"knowledge_base_id"`
+	DocumentName    string    `json:"document_name"`
+	RankNo          int       `json:"rank_no"`
+	SourcePage      *int      `json:"source_page,omitempty"`
 }
 
 type CreateSessionInput struct {
@@ -50,6 +61,25 @@ type CreateMessageInput struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	Citations        []CreateCitationInput
+}
+
+type CreateCitationInput struct {
+	DocumentChunkID uuid.UUID
+	DocumentID      uuid.UUID
+	KnowledgeBaseID uuid.UUID
+	RankNo          int
+}
+
+type UpdateMessageInput struct {
+	Content          string
+	Status           string
+	ModelUsed        *string
+	Grounded         bool
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	Citations        []CreateCitationInput
 }
 
 type ListSessionsResult struct {

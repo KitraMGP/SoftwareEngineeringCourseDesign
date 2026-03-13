@@ -8,7 +8,7 @@
 - `cmd/worker`: Worker 入口
 - `internal/platform`: 配置、数据库连接、HTTP 响应、中间件、鉴权、本地文件存储
 - `internal/account`: 注册、登录、刷新令牌、退出登录、当前用户信息、修改密码
-- `internal/chat`: 会话创建、列表、详情、删除；无知识库场景下的 DeepSeek SSE 聊天
+- `internal/chat`: 会话创建、列表、详情、删除；普通聊天与知识库 RAG SSE 聊天
 - `internal/kb`: 知识库 CRUD、文档上传、文档列表/详情/删除、重建索引任务创建
 - `internal/task`: 统一任务模型、任务创建与状态推进
 - `internal/worker`: 异步任务消费执行器
@@ -35,9 +35,19 @@ cp backend/.env.example backend/.env
 - `DATABASE_DSN`
 - `AUTH_JWT_SECRET`
 - `DEEPSEEK_API_KEY`
+- `AI_EMBEDDING_PROVIDER`
 - `STORAGE_PROVIDER`
 - `STORAGE_BUCKET`
 - `STORAGE_LOCAL_ROOT`
+
+embedding 相关说明：
+
+- 默认 `AI_EMBEDDING_PROVIDER=local_hash`，不依赖额外远程服务，适合本地开发和课程演示
+- 如果你有可用的 OpenAI 兼容 embedding 服务，可改成：
+  - `AI_EMBEDDING_PROVIDER=openai_compatible`
+  - `AI_EMBEDDING_BASE_URL=<你的 embedding base url>`
+  - `AI_EMBEDDING_API_KEY=<你的 embedding key>`
+- 当前聊天仍然使用 DeepSeek Chat Completions；embedding provider 与聊天 provider 可以分开配置
 
 3. 准备 PostgreSQL 15+，推荐直接用仓库内的开发容器
 
@@ -107,18 +117,23 @@ cd backend
 GOCACHE=/tmp/go-build go test ./...
 ```
 
-## 当前基础 AI 聊天能力
+## 当前 AI 聊天能力
 
 - 聊天接口：`POST /api/v1/sessions/{sessionId}/messages`
 - 返回类型：`text/event-stream`
 - 当前已接入 provider：`DeepSeek`
 - 当前支持场景：
   - 会话未绑定知识库时的通用聊天
+  - 会话绑定知识库时的 RAG 聊天
   - 历史消息自动截取最近若干条拼接到上下文
+  - 命中知识库时基于 `pgvector` 检索 chunk，assistant 消息会保存引用
+  - 未命中知识库时自动回退为通用回答，并在 SSE `meta.grounded=false` 中标记
   - 用户消息和 assistant 消息落库
+  - 已支持 `POST /sessions/{sessionId}/messages/{messageId}/regenerate`
+  - 已支持 `POST /sessions/{sessionId}/stream/stop`
 - 当前限制：
-  - 若会话绑定了 `knowledge_base_id`，发送消息会返回 `501`
-  - `regenerate` 和 `stream/stop` 仍未实现
+  - `regenerate` 采用覆盖式更新，不保留回答版本历史
+  - `stream/stop` 会终止当前会话正在生成的流；若成功中断，不会把不完整答案落库
 
 建议至少补齐以下环境变量：
 
@@ -127,6 +142,8 @@ GOCACHE=/tmp/go-build go test ./...
 - `AI_CHAT_TIMEOUT`
 - `AI_MAX_HISTORY_MESSAGES`
 - `AI_SSE_HEARTBEAT_INTERVAL`
+- `AI_EMBEDDING_PROVIDER`
+- `AI_RAG_MAX_CONTEXT_CHUNKS`
 
 ### 最小联调示例
 
@@ -205,6 +222,33 @@ curl http://127.0.0.1:8080/api/v1/sessions/<session_id> \
   -H "Authorization: Bearer <access_token>"
 ```
 
+### 知识库 RAG 联调要点
+
+- 若要测试知识库会话下的 RAG 聊天，最短顺序是：
+  - 创建知识库
+  - 上传 `txt` / `md` / `docx`
+  - 等待 worker 将文档状态处理为 `available`
+  - 创建带 `knowledge_base_id` 的会话
+  - 调用 `POST /api/v1/sessions/{sessionId}/messages`
+- SSE 的 `meta.grounded`：
+  - `true` 表示命中了知识库上下文
+  - `false` 表示知识库未命中，当前回答已回退为通用回答
+- 回查 `GET /api/v1/sessions/{sessionId}` 时，assistant 消息的 `citations` 字段会返回引用文档信息
+
+### 重生成与停止生成
+
+- `POST /api/v1/sessions/{sessionId}/messages/{messageId}/regenerate`
+  - 返回类型也是 `text/event-stream`
+  - 会基于原用户问题重新检索并生成回答
+  - `meta.message_id` 会等于原 assistant 消息 ID
+  - 成功后会直接覆盖原 assistant 消息内容、token 用量和 `citations`
+- `POST /api/v1/sessions/{sessionId}/stream/stop`
+  - 返回 JSON：`{"code":0,"message":"ok","data":{"stopped":true|false}}`
+  - `stopped=true` 表示当前确实中断了一个活跃流
+  - `stopped=false` 表示当前会话没有正在运行的流
+- 同一会话同一时刻只允许一个活跃生成任务
+  - 若在已有流未结束时再次调用发送消息或重生成，会返回 `409`
+
 ## 当前文档上传能力
 
 - 上传接口：`POST /api/v1/knowledge-bases/{kbId}/documents`
@@ -223,13 +267,15 @@ curl http://127.0.0.1:8080/api/v1/sessions/<session_id> \
   - `txt`
   - `markdown`
   - `docx`
+- 当前 embedding 行为：
+  - 默认使用本地 `local_hash` embedding，把文档 chunk 和查询统一映射到 `1536` 维向量，适合本地开发与演示
+  - 若你配置了 `AI_EMBEDDING_PROVIDER=openai_compatible`，worker 和 RAG 查询都会改用远程 embedding 服务
 - 当前限制：
   - `pdf` 上传会被接受，但 worker 目前会把该文档任务标记为 `failed`，因为 PDF 解析器尚未接入
-  - embedding 目前仍是占位零向量，用于先打通上传、任务、分块和状态流转
 
 ## 下一阶段建议
 
-1. 将当前无知识库聊天扩展为带检索的 RAG 问答
-2. 替换占位 embedding，实现真实向量化与 pgvector 检索
-3. 完成消息重生成与中断
-4. 完成管理员的用户、任务、系统参数、配额和审计接口
+1. 接入 PDF 解析
+2. 若有真实 embedding 服务，切换 `AI_EMBEDDING_PROVIDER=openai_compatible`
+3. 完成管理员的用户、任务、系统参数、配额和审计接口
+4. 继续补 quota / audit 统计落库

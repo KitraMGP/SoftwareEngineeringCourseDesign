@@ -148,6 +148,10 @@ func (r *Repository) GetDetail(ctx context.Context, userID, sessionID uuid.UUID)
 		return nil, fmt.Errorf("iterate messages: %w", rows.Err())
 	}
 
+	if err := r.loadMessageCitations(ctx, messages); err != nil {
+		return nil, fmt.Errorf("load message citations: %w", err)
+	}
+
 	return &SessionDetail{
 		Session:  *session,
 		Messages: messages,
@@ -221,10 +225,198 @@ func (r *Repository) CreateMessage(ctx context.Context, userID, sessionID uuid.U
 		return nil, fmt.Errorf("insert message: %w", err)
 	}
 
+	if len(input.Citations) > 0 {
+		var batch pgx.Batch
+		for _, citation := range input.Citations {
+			batch.Queue(`
+				INSERT INTO message_citations (
+					message_id,
+					document_chunk_id,
+					document_id,
+					knowledge_base_id,
+					rank_no
+				)
+				VALUES ($1, $2, $3, $4, $5)
+			`, message.ID, citation.DocumentChunkID, citation.DocumentID, citation.KnowledgeBaseID, citation.RankNo)
+		}
+
+		results := tx.SendBatch(ctx, &batch)
+		for range input.Citations {
+			if _, err := results.Exec(); err != nil {
+				results.Close()
+				return nil, fmt.Errorf("insert message citation: %w", err)
+			}
+		}
+		if err := results.Close(); err != nil {
+			return nil, fmt.Errorf("close citation batch: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit create message tx: %w", err)
 	}
 	return message, nil
+}
+
+func (r *Repository) UpdateMessage(ctx context.Context, userID, sessionID, messageID uuid.UUID, input UpdateMessageInput) (*Message, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin update message tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
+		UPDATE sessions
+		SET updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
+		  AND user_id = $2
+		  AND deleted_at IS NULL
+		RETURNING id
+	`, sessionID, userID)
+
+	var guardedSessionID uuid.UUID
+	if err := row.Scan(&guardedSessionID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("guard session before update message: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM message_citations
+		WHERE message_id = $1
+	`, messageID); err != nil {
+		return nil, fmt.Errorf("delete existing message citations: %w", err)
+	}
+
+	messageRow := tx.QueryRow(ctx, `
+		UPDATE messages
+		SET content = $4,
+		    status = $5,
+		    model_used = $6,
+		    grounded = $7,
+		    prompt_tokens = $8,
+		    completion_tokens = $9,
+		    total_tokens = $10,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
+		  AND session_id = $2
+		  AND EXISTS (
+			  SELECT 1
+			  FROM sessions
+			  WHERE id = $2
+			    AND user_id = $3
+			    AND deleted_at IS NULL
+		  )
+		RETURNING id, session_id, role, reply_to_message_id, content, status, model_used, grounded, prompt_tokens, completion_tokens, total_tokens, created_at, updated_at
+	`, messageID, guardedSessionID, userID, input.Content, input.Status, normalizeOptionalString(input.ModelUsed), input.Grounded, input.PromptTokens, input.CompletionTokens, input.TotalTokens)
+
+	message, err := scanMessage(messageRow)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("update message: %w", err)
+	}
+
+	if len(input.Citations) > 0 {
+		var batch pgx.Batch
+		for _, citation := range input.Citations {
+			batch.Queue(`
+				INSERT INTO message_citations (
+					message_id,
+					document_chunk_id,
+					document_id,
+					knowledge_base_id,
+					rank_no
+				)
+				VALUES ($1, $2, $3, $4, $5)
+			`, message.ID, citation.DocumentChunkID, citation.DocumentID, citation.KnowledgeBaseID, citation.RankNo)
+		}
+
+		results := tx.SendBatch(ctx, &batch)
+		for range input.Citations {
+			if _, err := results.Exec(); err != nil {
+				results.Close()
+				return nil, fmt.Errorf("insert regenerated message citation: %w", err)
+			}
+		}
+		if err := results.Close(); err != nil {
+			return nil, fmt.Errorf("close regenerated citation batch: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit update message tx: %w", err)
+	}
+	return message, nil
+}
+
+func (r *Repository) loadMessageCitations(ctx context.Context, messages []Message) error {
+	messageIDs := make([]uuid.UUID, 0, len(messages))
+	messageIndex := make(map[uuid.UUID]int, len(messages))
+	for idx := range messages {
+		messageIDs = append(messageIDs, messages[idx].ID)
+		messageIndex[messages[idx].ID] = idx
+	}
+	if len(messageIDs) == 0 {
+		return nil
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT
+			mc.id,
+			mc.message_id,
+			mc.document_chunk_id,
+			mc.document_id,
+			mc.knowledge_base_id,
+			mc.rank_no,
+			COALESCE(NULLIF(d.title, ''), f.original_filename, 'Untitled Document') AS document_name,
+			dc.source_page
+		FROM message_citations mc
+		INNER JOIN document_chunks dc ON dc.id = mc.document_chunk_id
+		INNER JOIN documents d ON d.id = mc.document_id
+		LEFT JOIN files f ON f.id = d.file_id
+		WHERE mc.message_id = ANY($1::uuid[])
+		ORDER BY mc.message_id ASC, mc.rank_no ASC
+	`, messageIDs)
+	if err != nil {
+		return fmt.Errorf("query citations: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			messageID  uuid.UUID
+			citation   MessageCitation
+			sourcePage sql.NullInt32
+		)
+		if err := rows.Scan(
+			&citation.ID,
+			&messageID,
+			&citation.DocumentChunkID,
+			&citation.DocumentID,
+			&citation.KnowledgeBaseID,
+			&citation.RankNo,
+			&citation.DocumentName,
+			&sourcePage,
+		); err != nil {
+			return fmt.Errorf("scan citation: %w", err)
+		}
+		if sourcePage.Valid {
+			page := int(sourcePage.Int32)
+			citation.SourcePage = &page
+		}
+		idx, ok := messageIndex[messageID]
+		if !ok {
+			continue
+		}
+		messages[idx].Citations = append(messages[idx].Citations, citation)
+	}
+	if rows.Err() != nil {
+		return fmt.Errorf("iterate citations: %w", rows.Err())
+	}
+	return nil
 }
 
 func scanSession(row pgx.Row) (*Session, error) {
