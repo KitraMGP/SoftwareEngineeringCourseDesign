@@ -11,3 +11,8 @@ backend/data/
 
 tmp/*.log
 tmp/build/
+
+frontend/node_modules/
+frontend/apps/*/dist/
+frontend/playwright-report/
+frontend/test-results/
