@@ -12,7 +12,9 @@ import {
   SectionHeading,
   SurfaceCard,
   knowledgeBaseApi,
-  queryKeys
+  queryKeys,
+  scopeQueryKey,
+  useAuthStore
 } from '@private-kb/shared';
 import { formatDateTime } from '@private-kb/shared/utils/date';
 import { shortenText } from '@private-kb/shared/utils/format';
@@ -20,6 +22,8 @@ import { getErrorMessage, toFieldErrorMap } from '@private-kb/shared/utils/error
 
 const router = useRouter();
 const queryClient = useQueryClient();
+const authStore = useAuthStore();
+const userScope = computed(() => authStore.user?.id ?? null);
 
 const keyword = ref('');
 const searchKeyword = ref('');
@@ -45,13 +49,16 @@ const rules: FormRules<typeof form> = {
 };
 
 const knowledgeBasesQuery = useQuery({
-  queryKey: computed(() => queryKeys.knowledgeBases({ keyword: searchKeyword.value })),
+  queryKey: computed(() =>
+    scopeQueryKey(queryKeys.knowledgeBases({ keyword: searchKeyword.value }), userScope.value)
+  ),
   queryFn: () =>
     knowledgeBaseApi.listKnowledgeBases({
       page: 1,
       size: 50,
       keyword: searchKeyword.value || undefined
-    })
+    }),
+  enabled: computed(() => !!userScope.value)
 });
 
 const createMutation = useMutation({

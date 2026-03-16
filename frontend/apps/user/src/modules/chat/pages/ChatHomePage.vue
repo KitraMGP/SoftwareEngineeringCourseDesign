@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { ElMessage } from 'element-plus';
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
@@ -10,7 +10,9 @@ import {
   DEFAULT_CHAT_MODEL,
   PRODUCT_NAME,
   PRODUCT_TAGLINE,
-  queryKeys
+  queryKeys,
+  scopeQueryKey,
+  useAuthStore
 } from '@private-kb/shared';
 import { getErrorMessage } from '@private-kb/shared/utils/errors';
 
@@ -19,10 +21,13 @@ import { useChatUiStore } from '../../../stores/useChatUiStore';
 const router = useRouter();
 const queryClient = useQueryClient();
 const chatUiStore = useChatUiStore();
+const authStore = useAuthStore();
+const userScope = computed(() => authStore.user?.id ?? null);
 
 const sessionsQuery = useQuery({
-  queryKey: queryKeys.sessions({ page: 1, size: 20 }),
-  queryFn: () => chatApi.listSessions({ page: 1, size: 20 })
+  queryKey: computed(() => scopeQueryKey(queryKeys.sessions({ page: 1, size: 20 }), userScope.value)),
+  queryFn: () => chatApi.listSessions({ page: 1, size: 20 }),
+  enabled: computed(() => !!userScope.value)
 });
 
 const createSessionMutation = useMutation({

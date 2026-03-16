@@ -18,3 +18,4 @@ export * from './types/domain';
 export * from './utils/date';
 export * from './utils/errors';
 export * from './utils/format';
+export * from './utils/query';

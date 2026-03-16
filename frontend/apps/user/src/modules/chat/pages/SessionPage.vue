@@ -13,6 +13,7 @@ import {
   chatApi,
   formatDateTime,
   queryKeys,
+  scopeQueryKey,
   useAuthStore
 } from '@private-kb/shared';
 import type { Message } from '@private-kb/shared';
@@ -28,6 +29,7 @@ const route = useRoute();
 const queryClient = useQueryClient();
 const authStore = useAuthStore();
 const chatUiStore = useChatUiStore();
+const userScope = computed(() => authStore.user?.id ?? null);
 
 interface ActiveStreamState {
   kind: 'send' | 'regenerate';
@@ -45,9 +47,9 @@ const streamAbortController = ref<AbortController | null>(null);
 const sessionId = computed(() => String(route.params.sessionId || ''));
 
 const sessionQuery = useQuery({
-  queryKey: computed(() => queryKeys.session(sessionId.value)),
+  queryKey: computed(() => scopeQueryKey(queryKeys.session(sessionId.value), userScope.value)),
   queryFn: () => chatApi.getSessionDetail(sessionId.value),
-  enabled: computed(() => !!sessionId.value)
+  enabled: computed(() => !!userScope.value && !!sessionId.value)
 });
 
 const session = computed(() => sessionQuery.data.value?.session || null);

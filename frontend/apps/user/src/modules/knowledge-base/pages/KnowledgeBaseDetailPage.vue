@@ -6,7 +6,15 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { AppStatusBadge, SectionHeading, SurfaceCard, knowledgeBaseApi, queryKeys } from '@private-kb/shared';
+import {
+  AppStatusBadge,
+  SectionHeading,
+  SurfaceCard,
+  knowledgeBaseApi,
+  queryKeys,
+  scopeQueryKey,
+  useAuthStore
+} from '@private-kb/shared';
 import { formatDateTime } from '@private-kb/shared/utils/date';
 import { formatBytes } from '@private-kb/shared/utils/format';
 import { getErrorMessage, toFieldErrorMap } from '@private-kb/shared/utils/errors';
@@ -14,6 +22,8 @@ import { getErrorMessage, toFieldErrorMap } from '@private-kb/shared/utils/error
 const route = useRoute();
 const router = useRouter();
 const queryClient = useQueryClient();
+const authStore = useAuthStore();
+const userScope = computed(() => authStore.user?.id ?? null);
 
 const kbId = computed(() => String(route.params.kbId || ''));
 
@@ -36,15 +46,15 @@ const rules: FormRules<typeof form> = {
 };
 
 const knowledgeBaseQuery = useQuery({
-  queryKey: computed(() => queryKeys.knowledgeBase(kbId.value)),
+  queryKey: computed(() => scopeQueryKey(queryKeys.knowledgeBase(kbId.value), userScope.value)),
   queryFn: () => knowledgeBaseApi.getKnowledgeBase(kbId.value),
-  enabled: computed(() => !!kbId.value)
+  enabled: computed(() => !!userScope.value && !!kbId.value)
 });
 
 const documentsQuery = useQuery({
-  queryKey: computed(() => queryKeys.documents(kbId.value)),
+  queryKey: computed(() => scopeQueryKey(queryKeys.documents(kbId.value), userScope.value)),
   queryFn: () => knowledgeBaseApi.listDocuments(kbId.value, { page: 1, size: 100 }),
-  enabled: computed(() => !!kbId.value),
+  enabled: computed(() => !!userScope.value && !!kbId.value),
   refetchInterval: (query) => {
     const items = query.state.data?.items ?? [];
     return items.some((item) => ['pending', 'processing', 'deleting'].includes(item.status))
@@ -54,9 +64,11 @@ const documentsQuery = useQuery({
 });
 
 const documentDetailQuery = useQuery({
-  queryKey: computed(() => queryKeys.document(kbId.value, selectedDocumentId.value)),
+  queryKey: computed(() =>
+    scopeQueryKey(queryKeys.document(kbId.value, selectedDocumentId.value), userScope.value)
+  ),
   queryFn: () => knowledgeBaseApi.getDocument(kbId.value, selectedDocumentId.value),
-  enabled: computed(() => !!kbId.value && !!selectedDocumentId.value)
+  enabled: computed(() => !!userScope.value && !!kbId.value && !!selectedDocumentId.value)
 });
 
 const updateMutation = useMutation({

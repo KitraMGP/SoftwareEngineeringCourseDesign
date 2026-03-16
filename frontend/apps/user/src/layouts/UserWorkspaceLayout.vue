@@ -2,10 +2,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Menu } from '@element-plus/icons-vue';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { chatApi, knowledgeBaseApi } from '@private-kb/shared';
+import { chatApi, knowledgeBaseApi, scopeQueryKey } from '@private-kb/shared';
 import { DEFAULT_CHAT_MODEL, queryKeys } from '@private-kb/shared';
 import { useAuthStore } from '@private-kb/shared/auth/useAuthStore';
 import { getErrorMessage } from '@private-kb/shared/utils/errors';
@@ -22,15 +22,20 @@ const queryClient = useQueryClient();
 const authStore = useAuthStore();
 const chatUiStore = useChatUiStore();
 const userAppStore = useUserAppStore();
+const userScope = computed(() => authStore.user?.id ?? null);
 
 const sessionsQuery = useQuery({
-  queryKey: queryKeys.sessions({ page: 1, size: 20 }),
-  queryFn: () => chatApi.listSessions({ page: 1, size: 20 })
+  queryKey: computed(() => scopeQueryKey(queryKeys.sessions({ page: 1, size: 20 }), userScope.value)),
+  queryFn: () => chatApi.listSessions({ page: 1, size: 20 }),
+  enabled: computed(() => !!userScope.value)
 });
 
 const knowledgeBasesQuery = useQuery({
-  queryKey: queryKeys.knowledgeBases({ page: 1, size: 50 }),
-  queryFn: () => knowledgeBaseApi.listKnowledgeBases({ page: 1, size: 50 })
+  queryKey: computed(() =>
+    scopeQueryKey(queryKeys.knowledgeBases({ page: 1, size: 50 }), userScope.value)
+  ),
+  queryFn: () => knowledgeBaseApi.listKnowledgeBases({ page: 1, size: 50 }),
+  enabled: computed(() => !!userScope.value)
 });
 
 const activeSessionId = computed(() =>
@@ -81,6 +86,30 @@ const deleteSessionMutation = useMutation({
 });
 
 const roleLabel = computed(() => (authStore.user?.role === 'admin' ? '管理员' : '成员'));
+
+watch(userScope, (nextScope, previousScope) => {
+  if (!previousScope || nextScope === previousScope) {
+    return;
+  }
+
+  chatUiStore.clearKnowledgeBase();
+  chatUiStore.closeKnowledgeBaseDrawer();
+  userAppStore.setMobileSidebarOpen(false);
+});
+
+watch(
+  () => knowledgeBasesQuery.data.value?.items ?? [],
+  (items) => {
+    if (!chatUiStore.preferredKnowledgeBaseId) {
+      return;
+    }
+
+    const exists = items.some((item) => item.id === chatUiStore.preferredKnowledgeBaseId);
+    if (!exists) {
+      chatUiStore.clearKnowledgeBase();
+    }
+  }
+);
 
 function handleCreateSession(knowledgeBaseId?: string) {
   createSessionMutation.mutate(knowledgeBaseId || chatUiStore.preferredKnowledgeBaseId || undefined);
