@@ -218,12 +218,53 @@
   - 会话 CRUD
   - 未绑定知识库的空会话 SSE 问答
   - 知识库 CRUD
+
+## 2026-03-16 知识库页提示文案清理
+
+- 已删除知识库列表页和知识库详情页中不必要的“实现说明 / 当前后端限制 / 设计理由”类提示文案
+- 本轮精简包括：
+  - 列表页标题区的后端联调说明
+  - 列表页搜索区的结构说明
+  - 详情页统计卡片下的解释性提示
+  - 详情页状态卡中的 PDF 限制提示
+  - 详情页上传区的“自动刷新 / PDF 会失败”等说明
+- 已执行：
+  - `cd frontend && pnpm build`
+- 已用浏览器 MCP 实际检查：
+  - `http://127.0.0.1:5173/knowledge-bases`
+  - `http://127.0.0.1:5173/knowledge-bases/bf4b147e-bbfc-4889-bcd3-03ea01d96e7b`
+- 结果：
+  - 知识库列表页不再显示后端实现说明
+  - 知识库详情页不再显示文档体量、PDF 失败、自动刷新等提示
   - 文档上传 / 列表 / 详情 / 删除 / 重建索引
 - 对照后确认，之前前端仍缺少的可实现项主要是：
   - 用户端显式“退出登录”入口
   - 安全设置页的显式导航入口
   - `avatar_url` 的资料编辑与展示
 - 上述缺口本轮已全部补齐
+
+## 2026-03-16 全站提示文案收敛
+
+- 已继续扩展到全站范围，清理用户端与管理端中“实现状态 / 接口进度 / 占位说明 / 后续计划”类文案
+- 本轮覆盖：
+  - 用户端聊天页、知识库抽屉、关于页、登录页左侧说明、个人资料页、安全设置页
+  - 管理端登录布局、后台主布局、Dashboard、用户、任务、审计、系统设置、配额、模型配置、无权限页
+- 处理方式：
+  - 删除“已接通 / 当前版本 / 501 / 占位 / 待接入 / 后续替换”等开发态提示
+  - 保留真正必要的页面标题、操作按钮、基础字段和简短用途描述
+  - 将部分卡片改为中性标签，避免把研发进度直接暴露到界面
+- 已执行：
+  - `cd frontend && pnpm build`
+  - 关键词残留扫描未再发现上述类型文案
+- 已用浏览器 MCP 实际检查用户端页面：
+  - `http://127.0.0.1:5173/sessions/3b2676ef-61c6-4d1c-b9d7-c2f98ab8f617`
+  - `http://127.0.0.1:5173/about`
+  - `http://127.0.0.1:5173/me/profile`
+  - `http://127.0.0.1:5173/me/security`
+  - `http://127.0.0.1:5173/knowledge-bases`
+  - `http://127.0.0.1:5173/knowledge-bases/bf4b147e-bbfc-4889-bcd3-03ea01d96e7b`
+- 备注：
+  - 管理端本地 dev server 当前未在浏览器可访问地址上运行，因此本轮对管理端做了代码扫描与构建验证，但未做浏览器直查
 
 ### 本轮新增实现
 
@@ -703,3 +744,58 @@
   - user / admin 均通过
 - 已完成 `cd frontend && pnpm build`
   - user / admin 均通过
+
+## 2026-03-16 PDF 后端能力同步
+
+- 已根据后端最新实现同步认知：
+  - 文本型 `pdf` 当前已可上传并完成 ingest
+  - 扫描件或纯图片型 `pdf` 仍会在后端处理阶段失败，因为 OCR 尚未实现
+- 前端后续提示语应以此为准：
+  - 不再将所有 `pdf` 一概视为失败
+  - 仅在后端返回无可提取文本时，提示“当前 PDF 为扫描件，OCR 尚未实现”
+
+## 2026-03-16 管理后台真实联调与管理员登录修复
+
+### 本轮实现
+
+- 已补齐共享层管理后台能力导出：
+  - `packages/shared/src/api/admin.ts`
+  - `packages/shared/src/constants/queryKeys.ts`
+  - `packages/shared/src/index.ts`
+- 已修复管理端管理员切换账号链路：
+  - `admin` 路由守卫不再把“已登录但非管理员”的用户从 `/login` 强行打回 `/forbidden`
+  - 后台登录页在普通用户凭据登录成功后会立即执行 `logout`，清理后台登录态并停留在登录页
+  - 无权限页已增加“切换账号 / 退出当前账号”操作
+- 已将以下页面从静态占位替换为真实接口驱动页面：
+  - `Dashboard`
+  - `用户管理`
+  - `任务管理`
+  - `模型配置`
+  - `系统设置`
+  - `配额策略`
+  - `审计日志`
+- 已修复运行时组件注册缺口：
+  - `packages/shared/src/utils/installElementPlus.ts`
+  - 新增注册 `ElSelect / ElOption / ElTable / ElTableColumn / ElPagination`
+
+### 本轮测试
+
+- 已完成：
+  - `cd frontend && pnpm --filter @private-kb/admin typecheck`
+  - `cd frontend && pnpm --filter @private-kb/admin build`
+  - `cd frontend && pnpm --filter @private-kb/user typecheck`
+  - `cd frontend && pnpm --filter @private-kb/user build`
+- 已使用浏览器 MCP 做管理端真实回归：
+  - 在保留非管理员刷新令牌的旧状态下，访问 `http://127.0.0.1:5174/login` 不再被错误重定向到 `/forbidden`
+  - 使用普通用户 `adminswitch0316 / Adminswitch123` 登录后台时，会触发 `login -> logout`，页面停留在 `/login`，密码框清空
+  - 使用管理员 `admin / 12345678abc` 登录成功并进入 Dashboard
+  - Dashboard 已正确显示真实统计数据
+  - 用户页已正确加载 16 条账号，且“当前账号”冻结按钮为禁用态
+  - 已在用户页成功执行一次冻结与一次恢复操作，目标用户：
+    - `adminswitch0316`
+  - 审计页已正确展示上述 `admin.user.freeze / admin.user.unfreeze` 记录
+  - 任务页已正确加载 21 条任务；当前环境无 `failed` 任务，因此仅验证了列表展示、分页和“重试”按钮禁用态
+  - 模型配置页、系统设置页、配额策略页、无权限页均已验证渲染正常
+- 浏览器控制台检查结果：
+  - 修复前存在 `Failed to resolve component: el-select / el-table / el-pagination`
+  - 修复后页面切换不再出现上述运行时告警

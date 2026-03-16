@@ -9,23 +9,23 @@ import {
 } from '@private-kb/shared';
 
 const quickSteps = [
-  '先登录并创建知识库，确认资料归属范围。',
-  '上传 txt、markdown、docx 或 pdf 文档，等待状态轮询完成。',
-  '从侧栏进入会话，新建与知识库绑定的新上下文。'
+  '登录并进入工作区。',
+  '创建知识库并整理资料。',
+  '在会话中继续提问与追问。'
 ];
 
 const faqs = [
   {
-    question: '为什么切换知识库会从新会话开始？',
-    answer: '当前产品将会话上下文和知识库上下文一起管理，从新会话开始可以避免历史消息混入新的资料边界。'
+    question: '如何开始使用？',
+    answer: '先登录，再根据资料主题创建知识库，随后从会话页面开始提问。'
   },
   {
-    question: '现在能直接发送问题吗？',
-    answer: '可以。普通会话会直接走通用问答；绑定知识库的会话会先检索资料，并在命中时返回引用来源。assistant 消息也支持停止生成和重新生成。'
+    question: '什么时候适合使用知识库？',
+    answer: '当你需要围绕固定资料持续提问、整理答案或追踪文档时，知识库会更合适。'
   },
   {
-    question: 'PDF 为什么可能上传后失败？',
-    answer: '当前后端会先接受 PDF 文件，但解析器尚未接入，因此失败信息会在文档状态里返回。'
+    question: '在哪里管理账户信息？',
+    answer: '你可以在侧栏进入个人资料与安全设置页面，维护昵称、头像和密码。'
   }
 ];
 </script>
@@ -36,7 +36,7 @@ const faqs = [
       <SectionHeading
         eyebrow="About"
         :title="`关于 ${PRODUCT_NAME}`"
-        :description="`${PRODUCT_TAGLINE}。这里汇总当前版本的定位、使用方式和项目构建信息。`"
+        :description="PRODUCT_TAGLINE"
       />
 
       <div class="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
@@ -44,7 +44,7 @@ const faqs = [
           <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Product intro</p>
           <h2 class="mt-4 font-serif text-3xl text-slate-900">{{ ASSISTANT_NAME }}</h2>
           <p class="mt-4 text-sm leading-7 text-slate-500">
-            当前版本已经具备“私有知识库问答系统”的用户端主路径：认证、普通会话与知识库问答、引用展示、知识库与文档管理、个人中心，以及管理端的独立应用骨架。
+            {{ PRODUCT_NAME }} 让会话、知识库与个人工作区保持在同一套界面里，方便持续整理资料和追踪问题。
           </p>
         </SurfaceCard>
 
@@ -82,15 +82,15 @@ const faqs = [
             <p class="mt-3 text-xl font-semibold text-white">{{ BUILD_VERSION }}</p>
           </div>
           <div>
-            <p class="text-xs uppercase tracking-[0.3em] text-white/45">User app</p>
+            <p class="text-xs uppercase tracking-[0.3em] text-white/45">Workspace</p>
             <p class="mt-3 text-sm leading-6 text-white/76">
-              登录、知识库问答、停止生成、重新生成、知识库管理、关于页和个人中心已落入 V1。
+              在会话和知识库之间切换工作，并持续追踪资料与提问。
             </p>
           </div>
           <div>
-            <p class="text-xs uppercase tracking-[0.3em] text-white/45">Admin app</p>
+            <p class="text-xs uppercase tracking-[0.3em] text-white/45">Account</p>
             <p class="mt-3 text-sm leading-6 text-white/76">
-              已建立独立后台骨架，等待管理端接口逐步替换占位数据。
+              在个人资料和安全设置中统一维护账户信息。
             </p>
           </div>
         </div>

@@ -10,6 +10,11 @@ import {
   ElIcon,
   ElInput,
   ElInputNumber,
+  ElOption,
+  ElPagination,
+  ElSelect,
+  ElTable,
+  ElTableColumn,
   ElUpload,
   provideGlobalConfig
 } from 'element-plus';
@@ -25,6 +30,11 @@ const elementComponents = [
   ElIcon,
   ElInput,
   ElInputNumber,
+  ElOption,
+  ElPagination,
+  ElSelect,
+  ElTable,
+  ElTableColumn,
   ElUpload
 ] as const;
 

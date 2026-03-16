@@ -229,7 +229,7 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
       <SectionHeading
         eyebrow="Knowledge base detail"
         :title="knowledgeBaseQuery.data.value?.name || '知识库详情'"
-        :description="knowledgeBaseQuery.data.value?.description || '这里可以继续维护知识库配置、上传文档并跟踪状态轮询。'"
+        :description="knowledgeBaseQuery.data.value?.description || undefined"
       >
         <template #actions>
           <button
@@ -262,7 +262,6 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
             <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
               <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Documents</p>
               <p class="mt-3 font-serif text-4xl text-slate-900">{{ documents.length }}</p>
-              <p class="mt-2 text-sm leading-6 text-slate-500">文档数量直接反映当前知识库的可用资料体量。</p>
             </div>
 
             <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
@@ -281,7 +280,6 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
                   </p>
                 </div>
               </div>
-              <p class="mt-3 text-sm leading-6 text-slate-500">检索参数保留为中等强调，避免和核心计数抢层级。</p>
             </div>
 
             <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
@@ -289,7 +287,6 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
               <p class="mt-3 break-all text-base font-semibold text-slate-900">
                 {{ knowledgeBaseQuery.data.value?.embedding_model || '--' }}
               </p>
-              <p class="mt-3 text-sm leading-6 text-slate-500">保持为普通信息密度，不再用超大字号把模型名撑开。</p>
             </div>
 
             <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
@@ -318,11 +315,7 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
             <AppStatusBadge :tone="hasProcessingDocuments ? 'warning' : 'success'">
               {{ hasProcessingDocuments ? '文档轮询中' : '文档状态稳定' }}
             </AppStatusBadge>
-            <AppStatusBadge tone="warning">PDF 处理受限</AppStatusBadge>
           </div>
-          <p class="mt-4 text-sm leading-6 text-slate-500">
-            当前页面把真正需要高亮的内容收敛为文档状态和检索配置。PDF 仍会在处理阶段失败，但不再占据大段首屏正文。
-          </p>
           <div class="mt-5 rounded-[18px] border border-white/80 bg-white/88 px-4 py-4">
             <p class="text-xs uppercase tracking-[0.24em] text-slate-400">最近更新</p>
             <p class="mt-2 text-sm font-medium text-slate-900">
@@ -334,16 +327,9 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
 
       <SurfaceCard>
         <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div class="max-w-2xl space-y-4">
+          <div class="max-w-2xl space-y-1">
             <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Upload documents</p>
-            <h3 class="font-serif text-[1.8rem] leading-tight text-slate-900">上传资料并等待处理完成</h3>
-            <p class="text-sm leading-6 text-slate-500">
-              上传区只保留单文件入口，完成后自动刷新文档列表。若你上传 PDF，当前后端会先接受文件，再在处理阶段将其标记为失败。
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <AppStatusBadge tone="info">支持 txt / md / docx</AppStatusBadge>
-              <AppStatusBadge tone="warning">PDF 处理阶段会失败</AppStatusBadge>
-            </div>
+            <h3 class="font-serif text-[1.8rem] leading-tight text-slate-900">上传资料</h3>
           </div>
 
           <el-upload
@@ -356,9 +342,6 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
           >
             <div class="py-4 text-center">
               <p class="text-base font-medium text-slate-900">拖拽文件到这里，或点击上传</p>
-              <p class="mt-2 text-sm leading-6 text-slate-500">
-                每次单文件上传，上传完成后会自动刷新文档列表。
-              </p>
             </div>
           </el-upload>
         </div>
@@ -445,8 +428,7 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
           v-else
           class="mt-5 rounded-[20px] border border-dashed border-slate-200 bg-white/75 px-5 py-7 text-sm leading-6 text-slate-500"
         >
-          当前还没有文档。上传首个文件后，系统会在这里展示 pending、processing、available 或 failed
-          等状态变化。
+          暂无文档。
         </div>
       </SurfaceCard>
     </div>

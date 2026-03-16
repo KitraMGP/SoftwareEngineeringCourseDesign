@@ -37,15 +37,15 @@ const backgroundImage = computed(
               </p>
             </div>
             <div class="rounded-[24px] border border-white/20 bg-white/10 p-5 backdrop-blur">
-              <p class="text-xs uppercase tracking-[0.28em] text-white/60">知识库联调</p>
+              <p class="text-xs uppercase tracking-[0.28em] text-white/60">知识库整理</p>
               <p class="mt-3 text-sm leading-6 text-white/84">
-                已接入真实知识库与文档接口，便于先把资产整理起来。
+                在同一工作区内集中整理文档与资料。
               </p>
             </div>
             <div class="rounded-[24px] border border-white/20 bg-white/10 p-5 backdrop-blur">
-              <p class="text-xs uppercase tracking-[0.28em] text-white/60">后续扩展</p>
+              <p class="text-xs uppercase tracking-[0.28em] text-white/60">账户安全</p>
               <p class="mt-3 text-sm leading-6 text-white/84">
-                普通会话与知识库问答、停止生成和重生成都已接通，管理端会沿当前骨架继续接入。
+                在个人中心统一维护资料与安全设置。
               </p>
             </div>
           </div>

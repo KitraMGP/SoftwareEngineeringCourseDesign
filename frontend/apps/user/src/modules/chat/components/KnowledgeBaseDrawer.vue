@@ -45,9 +45,6 @@ function handleSelect(item: KnowledgeBase) {
       <div class="space-y-3 pb-5">
         <p class="text-xs uppercase tracking-[0.34em] text-slate-400">Knowledge context</p>
         <h2 class="font-serif text-3xl text-slate-900">选择知识库</h2>
-        <p class="text-sm leading-6 text-slate-500">
-          为了保持上下文清晰，切换知识库会从新会话开始。你可以先挑选资料库，再开启下一轮对话。
-        </p>
       </div>
 
       <div
@@ -58,8 +55,8 @@ function handleSelect(item: KnowledgeBase) {
           <div>
             <p class="text-xs uppercase tracking-[0.3em] text-white/55">已准备</p>
             <p class="mt-2 text-lg font-semibold">{{ selectedKnowledgeBase.name }}</p>
-            <p class="mt-2 text-sm leading-6 text-white/72">
-              {{ shortenText(selectedKnowledgeBase.description || '将以该知识库作为下一次会话的上下文来源。', 96) }}
+            <p v-if="selectedKnowledgeBase.description" class="mt-2 text-sm leading-6 text-white/72">
+              {{ shortenText(selectedKnowledgeBase.description, 96) }}
             </p>
           </div>
           <button
@@ -93,7 +90,7 @@ function handleSelect(item: KnowledgeBase) {
                 class="text-sm leading-6"
                 :class="selectedId === item.id ? 'text-white/72' : 'text-slate-500'"
               >
-                {{ shortenText(item.description || '当前知识库尚未补充摘要说明。', 92) }}
+                {{ shortenText(item.description || '暂无摘要', 92) }}
               </p>
             </div>
             <AppStatusBadge :tone="item.last_indexed_at ? 'success' : 'info'" :dot="false">
@@ -114,7 +111,7 @@ function handleSelect(item: KnowledgeBase) {
           v-if="!loading && knowledgeBases.length === 0"
           class="rounded-[24px] border border-dashed border-slate-200 bg-white px-5 py-8 text-sm leading-6 text-slate-500"
         >
-          还没有可用知识库。你可以先前往知识库页面创建资料库，再回来开始新会话。
+          暂无知识库。
         </div>
       </div>
 
@@ -125,11 +122,8 @@ function handleSelect(item: KnowledgeBase) {
           :disabled="loading"
           @click="emit('create-session', selectedId || undefined)"
         >
-          {{ selectedId ? '基于当前知识库开启新会话' : '直接开启空会话' }}
+          {{ selectedId ? '开启新会话' : '开启空会话' }}
         </button>
-        <p class="text-xs leading-5 text-slate-400">
-          如果你在下一次会话前仍未选定资料库，系统会以普通空会话方式创建。
-        </p>
       </div>
     </div>
   </el-drawer>

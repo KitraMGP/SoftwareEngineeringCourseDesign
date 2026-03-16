@@ -84,7 +84,7 @@ func main() {
 
 	chatHandler := chat.NewHandler(chatService, cfg.AI.SSEHeartbeatInterval)
 	kbHandler := kb.NewHandler(kb.NewService(kb.NewRepository(pool), taskService, storageService, cfg.Storage.MaxUploadBytes))
-	adminHandler := admin.NewHandler()
+	adminHandler := admin.NewHandler(admin.NewService(admin.NewRepository(pool)))
 
 	router := chi.NewRouter()
 	router.Use(httpx.RequestID)

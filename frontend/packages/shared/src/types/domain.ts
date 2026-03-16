@@ -184,3 +184,80 @@ export interface UploadDocumentResult {
   task_id: string;
   status: 'pending';
 }
+
+export interface AdminOverview {
+  user_count: number;
+  active_user_count: number;
+  knowledge_base_count: number;
+  document_count: number;
+  pending_task_count: number;
+  failed_task_count: number;
+}
+
+export interface AdminUser extends User {}
+
+export interface AdminTask {
+  id: string;
+  task_type: string;
+  resource_type: string;
+  resource_id?: string | null;
+  user_id?: string | null;
+  user_label?: string | null;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  attempt_count: number;
+  max_attempts: number;
+  next_run_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderConfig {
+  id: string;
+  provider: string;
+  base_url: string;
+  default_chat_model: string;
+  default_embedding_model: string;
+  is_enabled: boolean;
+  has_api_key: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SystemSetting {
+  key: string;
+  category: string;
+  value: unknown;
+  description?: string | null;
+  updated_at: string;
+}
+
+export interface QuotaPolicy {
+  id: string;
+  scope_type: 'system_default' | 'user';
+  scope_id?: string | null;
+  daily_total_tokens_limit: number;
+  storage_bytes_limit: number;
+  document_count_limit: number;
+  warn_ratio: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditLog {
+  id: number;
+  actor_user_id?: string | null;
+  actor_label?: string | null;
+  actor_role: 'user' | 'admin' | 'system';
+  action: string;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  target_user_id?: string | null;
+  target_label?: string | null;
+  result: 'success' | 'failure';
+  metadata: unknown;
+  created_at: string;
+}

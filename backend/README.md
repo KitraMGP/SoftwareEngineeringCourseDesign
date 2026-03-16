@@ -267,15 +267,17 @@ curl http://127.0.0.1:8080/api/v1/sessions/<session_id> \
   - `txt`
   - `markdown`
   - `docx`
+  - `pdf`（带可提取文本层的 PDF）
 - 当前 embedding 行为：
   - 默认使用本地 `local_hash` embedding，把文档 chunk 和查询统一映射到 `1536` 维向量，适合本地开发与演示
   - 若你配置了 `AI_EMBEDDING_PROVIDER=openai_compatible`，worker 和 RAG 查询都会改用远程 embedding 服务
 - 当前限制：
-  - `pdf` 上传会被接受，但 worker 目前会把该文档任务标记为 `failed`，因为 PDF 解析器尚未接入
+  - 扫描件或纯图片型 `pdf` 若不包含可提取文本层，worker 会将该文档任务标记为 `failed`
+  - 当前仍未实现 OCR，因此这类 PDF 无法入库
 
 ## 下一阶段建议
 
-1. 接入 PDF 解析
+1. 为扫描件 PDF 接入 OCR
 2. 若有真实 embedding 服务，切换 `AI_EMBEDDING_PROVIDER=openai_compatible`
 3. 完成管理员的用户、任务、系统参数、配额和审计接口
 4. 继续补 quota / audit 统计落库

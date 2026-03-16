@@ -7,10 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
+
+	"github.com/ledongthuc/pdf"
 )
 
 const (
@@ -72,10 +76,7 @@ func ParseDocumentContent(mimeType, filename string, data []byte) (string, error
 	case MIMEDocx:
 		return parseDOCX(data)
 	case MIMEApplicationPDF:
-		return "", &IngestError{
-			Message:   "pdf parser is not implemented yet",
-			Retryable: false,
-		}
+		return parsePDF(data)
 	default:
 		if detected, err := NormalizeUploadMetadata(filename, mimeType); err == nil {
 			return ParseDocumentContent(detected, filename, data)
@@ -237,6 +238,336 @@ func parseDOCX(data []byte) (string, error) {
 	return content, nil
 }
 
+func parsePDF(data []byte) (string, error) {
+	reader, err := newPDFReader(data)
+	if err != nil {
+		return "", &IngestError{
+			Message:   "invalid pdf file",
+			Retryable: false,
+		}
+	}
+
+	text, err := extractPDFText(reader)
+	if err != nil {
+		return "", &IngestError{
+			Message:   fmt.Sprintf("failed to extract pdf text: %v", err),
+			Retryable: false,
+		}
+	}
+
+	content := normalizeExtractedText(text)
+	if content == "" {
+		return "", &IngestError{
+			Message:   "pdf contains no extractable text; OCR is not implemented",
+			Retryable: false,
+		}
+	}
+
+	return content, nil
+}
+
+func newPDFReader(data []byte) (*pdf.Reader, error) {
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err == nil {
+		return reader, nil
+	}
+
+	normalized, changed := normalizePDFHeader(data)
+	if !changed {
+		return nil, err
+	}
+
+	return pdf.NewReader(bytes.NewReader(normalized), int64(len(normalized)))
+}
+
+func normalizePDFHeader(data []byte) ([]byte, bool) {
+	if len(data) < 10 || !bytes.HasPrefix(data, []byte("%PDF-1.")) {
+		return nil, false
+	}
+
+	if data[8] == '\n' || data[8] == '\r' {
+		return nil, false
+	}
+
+	newlineIndex := bytes.IndexByte(data, '\n')
+	if newlineIndex < 0 || newlineIndex <= 8 {
+		return nil, false
+	}
+
+	normalized := append([]byte(nil), data...)
+	normalized[8] = '\n'
+
+	if len(normalized) > 9 && normalized[9] != '%' && normalized[9] != '\n' && normalized[9] != '\r' {
+		normalized[9] = '%'
+	}
+
+	return normalized, true
+}
+
+func extractPDFText(reader *pdf.Reader) (string, error) {
+	var builder strings.Builder
+
+	for pageIndex := 1; pageIndex <= reader.NumPage(); pageIndex++ {
+		pageText, err := extractPDFPageText(reader.Page(pageIndex))
+		if err != nil {
+			return "", err
+		}
+		pageText = strings.TrimSpace(pageText)
+		if pageText == "" {
+			continue
+		}
+
+		if builder.Len() > 0 {
+			builder.WriteString("\n\n")
+		}
+		builder.WriteString(pageText)
+	}
+
+	return builder.String(), nil
+}
+
+func extractPDFPageText(page pdf.Page) (result string, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = ""
+			err = fmt.Errorf("%v", recovered)
+		}
+	}()
+
+	content := page.Content()
+	return rebuildPDFPageText(content.Text), nil
+}
+
+func rebuildPDFPageText(items []pdf.Text) string {
+	if len(items) == 0 {
+		return ""
+	}
+
+	var (
+		pageBuilder     strings.Builder
+		lineBuilder     strings.Builder
+		previous        pdf.Text
+		hasPrevious     bool
+		pendingSpace    bool
+		lastLineY       float64
+		hasLastLineY    bool
+		lineHasContent  bool
+		lineEndsWithGap bool
+	)
+
+	flushLine := func(next *pdf.Text) {
+		line := strings.TrimSpace(lineBuilder.String())
+		lineBuilder.Reset()
+		pendingSpace = false
+		lineHasContent = false
+		lineEndsWithGap = false
+
+		if line == "" {
+			hasPrevious = false
+			return
+		}
+
+		if pageBuilder.Len() > 0 {
+			if next != nil && hasLastLineY && shouldInsertPDFParagraphBreak(lastLineY, next.Y, next.FontSize) {
+				pageBuilder.WriteString("\n\n")
+			} else {
+				pageBuilder.WriteByte('\n')
+			}
+		}
+		pageBuilder.WriteString(line)
+
+		if hasPrevious {
+			lastLineY = previous.Y
+			hasLastLineY = true
+		}
+		hasPrevious = false
+	}
+
+	for index := range items {
+		current := items[index]
+		segment := replacePDFLigatures(current.S)
+		if segment == "" {
+			continue
+		}
+
+		if isPDFLineBreakSegment(segment) {
+			flushLine(nil)
+			continue
+		}
+
+		if isPDFWhitespaceSegment(segment) {
+			if lineHasContent {
+				pendingSpace = true
+			}
+			continue
+		}
+
+		if hasPrevious && shouldBreakPDFLine(previous, current) {
+			flushLine(&current)
+		}
+
+		if lineHasContent && !beginsWithClosingPunctuation(segment) {
+			if pendingSpace || (hasPrevious && shouldInsertPDFSpace(previous, current, segment)) {
+				if !lineEndsWithGap {
+					lineBuilder.WriteByte(' ')
+					lineEndsWithGap = true
+				}
+			}
+		}
+
+		lineBuilder.WriteString(segment)
+		lineHasContent = true
+		lineEndsWithGap = false
+		previous = current
+		hasPrevious = true
+		pendingSpace = false
+	}
+
+	flushLine(nil)
+	return pageBuilder.String()
+}
+
+func isPDFLineBreakSegment(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	for _, r := range value {
+		if r == '\n' || r == '\r' || r == '\f' {
+			return true
+		}
+		if !unicode.IsSpace(r) {
+			return false
+		}
+	}
+
+	return false
+}
+
+func isPDFWhitespaceSegment(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	for _, r := range value {
+		if !unicode.IsSpace(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func shouldBreakPDFLine(previous, current pdf.Text) bool {
+	lineBreakThreshold := math.Max(math.Min(nonZeroPDFMetric(previous.FontSize, 12), nonZeroPDFMetric(current.FontSize, 12))*0.8, 3)
+	xResetThreshold := math.Max(math.Min(nonZeroPDFMetric(previous.FontSize, 12), nonZeroPDFMetric(current.FontSize, 12))*0.5, 2)
+
+	if current.Y > previous.Y+lineBreakThreshold {
+		return true
+	}
+	if current.X+xResetThreshold < previous.X {
+		return true
+	}
+
+	return math.Abs(current.Y-previous.Y) > lineBreakThreshold && current.X <= previous.X+previous.W+xResetThreshold
+}
+
+func shouldInsertPDFParagraphBreak(previousLineY, nextLineY, nextFontSize float64) bool {
+	if nextLineY >= previousLineY {
+		return false
+	}
+
+	return previousLineY-nextLineY > math.Max(nonZeroPDFMetric(nextFontSize, 12)*1.6, 14)
+}
+
+func shouldInsertPDFSpace(previous, current pdf.Text, currentSegment string) bool {
+	if currentSegment == "" {
+		return false
+	}
+
+	if beginsWithClosingPunctuation(currentSegment) {
+		return false
+	}
+
+	gap := current.X - (previous.X + previous.W)
+	if gap <= 0.05 {
+		return false
+	}
+
+	spaceThreshold := math.Max(math.Max(nonZeroPDFMetric(previous.FontSize, 12), nonZeroPDFMetric(current.FontSize, 12))*0.18, 1.1)
+
+	if gap >= spaceThreshold {
+		return true
+	}
+
+	prevLast, okPrev := lastRune(replacePDFLigatures(previous.S))
+	currFirst, okCurr := firstRune(currentSegment)
+	if !okPrev || !okCurr {
+		return false
+	}
+
+	if isPDFWordRune(prevLast) && isPDFWordRune(currFirst) && gap > 0.55 {
+		return true
+	}
+
+	return prefersPDFSpaceAfter(prevLast, currFirst) && gap > 0.4
+}
+
+func beginsWithClosingPunctuation(value string) bool {
+	first, ok := firstRune(value)
+	if !ok {
+		return false
+	}
+
+	return strings.ContainsRune(",.;:!?%)]}>", first)
+}
+
+func firstRune(value string) (rune, bool) {
+	for _, r := range value {
+		return r, true
+	}
+	return 0, false
+}
+
+func lastRune(value string) (rune, bool) {
+	for index := len(value); index > 0; {
+		r, size := utf8.DecodeLastRuneInString(value[:index])
+		if r == utf8.RuneError && size == 1 {
+			index -= size
+			continue
+		}
+		return r, true
+	}
+	return 0, false
+}
+
+func isPDFWordRune(value rune) bool {
+	return unicode.IsLetter(value) || unicode.IsDigit(value)
+}
+
+func prefersPDFSpaceAfter(previous, current rune) bool {
+	return strings.ContainsRune(":;,!?%)]}", previous) && (isPDFWordRune(current) || strings.ContainsRune(`"'`, current))
+}
+
+func nonZeroPDFMetric(value, fallback float64) float64 {
+	if value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func replacePDFLigatures(value string) string {
+	return strings.NewReplacer(
+		"ﬁ", "fi",
+		"ﬂ", "fl",
+		"ﬀ", "ff",
+		"ﬃ", "ffi",
+		"ﬄ", "ffl",
+		"ﬅ", "ft",
+		"ﬆ", "st",
+	).Replace(value)
+}
+
 func appendLineBreak(builder *strings.Builder) {
 	current := builder.String()
 	if current == "" || strings.HasSuffix(current, "\n") {
@@ -246,8 +577,10 @@ func appendLineBreak(builder *strings.Builder) {
 }
 
 func normalizeExtractedText(text string) string {
+	text = replacePDFLigatures(text)
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
+	text = strings.ReplaceAll(text, "\f", "\n")
 	lines := strings.Split(text, "\n")
 	for idx := range lines {
 		lines[idx] = strings.TrimSpace(lines[idx])

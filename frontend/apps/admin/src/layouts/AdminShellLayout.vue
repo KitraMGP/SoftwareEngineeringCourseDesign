@@ -35,7 +35,6 @@ async function handleLogout() {
       <div class="space-y-2">
         <p class="text-xs uppercase tracking-[0.34em] text-white/45">Admin workspace</p>
         <h1 class="font-serif text-3xl">{{ PRODUCT_NAME }}</h1>
-        <p class="text-sm leading-6 text-white/62">后台菜单已经拆分完成，可直接承接后续真实接口。</p>
       </div>
 
       <nav class="mt-8 grid gap-2">

@@ -74,19 +74,13 @@ async function handleSubmit() {
 <template>
   <div class="soft-scrollbar flex h-full flex-1 flex-col overflow-y-auto px-5 py-6 lg:px-8">
     <div class="space-y-6">
-      <SectionHeading
-        eyebrow="Security"
-        title="安全设置"
-        description="修改密码成功后将清理当前登录态，并要求重新登录。"
-      />
+      <SectionHeading eyebrow="Security" title="安全设置" />
 
       <div class="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <SurfaceCard>
           <p class="text-xs uppercase tracking-[0.3em] text-slate-400">安全提醒</p>
           <div class="mt-5 space-y-3 text-sm leading-7 text-slate-500">
             <p>新密码需要至少 8 位，并同时包含字母和数字。</p>
-            <p>修改密码后，当前 refresh 会话会被后端回收，需要重新登录才能继续访问工作区。</p>
-            <p>如果你在多个设备上登录，建议同步确认是否需要重新建立新会话。</p>
           </div>
         </SurfaceCard>
 

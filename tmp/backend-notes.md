@@ -503,3 +503,95 @@
   - 后端返回 `409`
   - 错误消息：`a message is already being generated for this session`
   - 随后调用 `stream/stop` 成功停止该流，且回查会话详情仍未产生 assistant 落库
+
+## 2026-03-16 PDF 文本提取接入
+
+- 已在 `backend/internal/kb/ingest.go` 接入 Go 库 `github.com/ledongthuc/pdf`
+- 当前 `pdf` 文本提取能力已支持：
+  - 带可提取文本层的常规 PDF
+  - 对部分厂商生成的宽松 PDF 头做兼容修正
+- 已补充测试：
+  - 最小可重复 PDF 构造测试
+  - 宽松 PDF 头兼容测试
+  - 通过环境变量注入真实 PDF 样本路径的手动 smoke test
+- 已验证：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./internal/kb`
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+  - `cd backend && GOCACHE=/tmp/go-build go build ./...`
+- 使用用户提供的真实样本：
+  - `/run/media/kitra/win_par1/04_文档/2026/保研/计算机科学与工程学院2026年推荐优秀应届本科毕业生免试攻读硕士学位研究生工作细则.pdf`
+  - 已确认该文件是扫描图像 PDF
+  - `pdftotext` 诊断输出仅有换页符，没有任何正文文本
+  - 当前 Go PDF 文本提取同样无法得到正文，因此会返回：
+    - `pdf contains no extractable text; OCR is not implemented`
+- 结论更新：
+  - “PDF 解析未实现”已不再准确
+  - 当前状态应改为：
+    - 文本型 PDF 已支持
+    - 扫描件/纯图片型 PDF 仍不支持，因为 OCR 尚未实现
+
+## 2026-03-16 PDF 文本可读性修复
+
+- 初版 `GetTextByRow()` 方案能提取出文本，但在真实英文论文 PDF 中会出现大量单词粘连，导致 chunk 可读性不足
+- 已改为基于 `page.Content().Text` 的字符级坐标重建：
+  - 按字符间距补空格
+  - 按坐标变化补行分隔
+  - 保留 ligature 归一化
+- 已新增针对字符级重建的单元测试：
+  - `TestRebuildPDFPageText`
+- 已使用用户提供的文本型 PDF 做真实链路验证：
+  - `/run/media/kitra/win_par1/04_文档/2026/文献/Informer Beyond Efficient Transformer for Long.pdf`
+  - `ParseDocumentContent` 样本测试通过
+  - 实际启动 `make run-api` + `make run-worker` 后上传成功
+  - 文档状态：`available`
+  - 任务状态：`succeeded`
+  - 数据库中 `document_chunks` 前缀已恢复为可读文本，例如：
+    - `Informer: Beyond Efficient Transformer for Long Sequence`
+    - `Time-Series Forecasting`
+
+## 2026-03-16 管理后台接口落地与冒烟
+
+- 已将 `backend/internal/admin/handler.go` 从占位 `501` 改为真实路由处理，并新增：
+  - `GET /api/v1/admin/overview`
+  - `GET /api/v1/admin/users`
+  - `POST /api/v1/admin/users/{userId}/freeze`
+  - `POST /api/v1/admin/users/{userId}/unfreeze`
+  - `GET /api/v1/admin/tasks`
+  - `POST /api/v1/admin/tasks/{taskId}/retry`
+  - `GET /api/v1/admin/provider-configs`
+  - `GET /api/v1/admin/settings`
+  - `GET /api/v1/admin/quota-policies`
+  - `GET /api/v1/admin/audit-logs`
+- 已新增：
+  - `backend/internal/admin/model.go`
+  - `backend/internal/admin/repository.go`
+  - `backend/internal/admin/service.go`
+- 已在 `backend/cmd/api/main.go` 接入真实 `admin` service / repository
+- 当前仍保持未实现的接口为显式 `feature_not_ready`：
+  - 创建/更新用户
+  - 重置用户密码
+  - 更新 provider 配置
+  - 更新系统设置
+  - 更新配额策略
+  - 用户用量查询
+
+### 本轮验证
+
+- 已完成：
+  - `cd backend && GOCACHE=/tmp/go-build go build ./...`
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- 已重新启动 API 新进程做联调
+  - 发现原 `:8080` 上仍是旧进程，返回旧版 `501/404`
+  - 已切换到新编译进程后继续验证
+- 已使用管理员账号 `admin / 12345678abc` 进行接口冒烟：
+  - `GET /api/v1/admin/overview` 返回真实统计
+  - `GET /api/v1/admin/users?page=1&size=10` 返回用户列表
+  - `GET /api/v1/admin/tasks?page=1&size=10` 返回任务列表
+  - `GET /api/v1/admin/provider-configs` 返回空列表
+  - `GET /api/v1/admin/settings` 返回 10 条系统设置
+  - `GET /api/v1/admin/quota-policies` 返回空列表
+  - `GET /api/v1/admin/audit-logs?page=1&size=10` 在前端冻结/恢复后返回新增审计记录
+- 已通过前端真实操作间接验证：
+  - `POST /api/v1/admin/users/{userId}/freeze`
+  - `POST /api/v1/admin/users/{userId}/unfreeze`
+  - 两次操作均成功，且审计日志写入正常

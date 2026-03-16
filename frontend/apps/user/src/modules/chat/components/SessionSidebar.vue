@@ -177,7 +177,7 @@ function sessionMode(session: Session): string {
           v-if="!loading && sessions.length === 0 && !collapsed"
           class="rounded-[24px] border border-dashed border-slate-200 bg-white/80 px-4 py-6 text-sm leading-6 text-slate-500"
         >
-          当前还没有会话。你可以直接创建空会话，或先选择知识库后再开始新对话。
+          暂无会话。
         </div>
       </div>
     </div>

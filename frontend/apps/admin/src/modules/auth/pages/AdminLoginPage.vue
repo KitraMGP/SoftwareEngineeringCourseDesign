@@ -31,7 +31,9 @@ const loginMutation = useMutation({
   mutationFn: () => authStore.login(form),
   onSuccess: async () => {
     if (!authStore.isAdmin) {
-      await router.push({ name: 'forbidden' });
+      await authStore.logout();
+      form.password = '';
+      ElMessage.error('当前账号没有后台权限，请使用管理员账号登录。');
       return;
     }
 
@@ -61,7 +63,7 @@ async function handleSubmit() {
       <p class="text-xs uppercase tracking-[0.34em] text-slate-400">Admin sign in</p>
       <h1 class="font-serif text-3xl text-slate-900">{{ PRODUCT_NAME }} 后台登录</h1>
       <p class="text-sm leading-6 text-slate-500">
-        使用具备管理员角色的账号登录。非管理员账号会被保留登录态，但无法进入后台工作区。
+        使用具备管理员角色的账号登录。按普通用户凭据登录时，系统会清理当前后台登录态并停留在本页。
       </p>
     </div>
 

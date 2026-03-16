@@ -155,16 +155,6 @@ const displayMessages = computed<UiChatMessage[]>(() => {
   return buildPreviewConversation(session.value || undefined);
 });
 
-const capabilityTone = computed<'success' | 'info'>(() => (session.value ? 'success' : 'info'));
-
-const capabilityLabel = computed(() => {
-  if (!session.value) {
-    return '会话加载中';
-  }
-
-  return isKnowledgeBoundSession.value ? '知识库问答已接通' : '通用问答已接通';
-});
-
 const composerHint = computed(() => {
   if (!session.value) {
     return '';
@@ -176,22 +166,12 @@ const composerHint = computed(() => {
       : 'Assistant 正在返回内容，你可以点击“停止生成”中断本轮回答。';
   }
 
-  if (isKnowledgeBoundSession.value) {
-    return '当前会话会先检索资料并在命中时展示引用。';
-  }
-
-  return '普通会话会直接回答；若要结合资料提问，可先选知识库再新建会话。';
+  return '';
 });
 
-const composerPlaceholder = computed(() =>
-  isKnowledgeBoundSession.value
-    ? '输入问题。Enter 发送，Shift+Enter 换行；将先检索当前知识库。'
-    : '输入问题。Enter 发送，Shift+Enter 换行。'
-);
+const composerPlaceholder = computed(() => '输入问题。Enter 发送，Shift+Enter 换行。');
 
-const composerSubmitLabel = computed(() =>
-  isKnowledgeBoundSession.value ? '发送问题' : '发送消息'
-);
+const composerSubmitLabel = computed(() => '发送');
 
 async function refetchSessionState() {
   await queryClient.invalidateQueries({ queryKey: queryKeys.sessionsRoot });
@@ -411,9 +391,6 @@ onBeforeUnmount(() => {
               <AppStatusBadge :tone="session?.knowledge_base_id ? 'success' : 'info'">
                 {{ session?.knowledge_base_name || '未绑定知识库' }}
               </AppStatusBadge>
-              <AppStatusBadge :tone="capabilityTone">
-                {{ capabilityLabel }}
-              </AppStatusBadge>
             </div>
             <p class="mt-2 text-sm leading-6 text-slate-500">
               创建于 {{ formatDateTime(session?.created_at) }}，模型标识为 {{ session?.model || DEFAULT_CHAT_MODEL }}。
@@ -430,22 +407,6 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-
-        <SurfaceCard class="mt-4" tone="soft" :padded="false">
-          <div class="flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-500">
-            <span>当前会话保留历史记录。</span>
-            <span class="hidden text-slate-300 md:inline">/</span>
-            <span>切换知识库会从新会话开始，避免上下文混杂。</span>
-            <router-link
-              v-if="session?.knowledge_base_id"
-              :to="{ name: 'knowledge-base-detail', params: { kbId: session.knowledge_base_id } }"
-              class="inline-flex items-center gap-1 font-medium text-slate-900 hover:text-brand-night"
-            >
-              查看当前知识库
-              <el-icon><ArrowRight /></el-icon>
-            </router-link>
-          </div>
-        </SurfaceCard>
       </div>
 
       <MessageThread

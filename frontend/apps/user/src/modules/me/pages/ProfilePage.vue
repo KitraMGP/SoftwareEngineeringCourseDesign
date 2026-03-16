@@ -79,11 +79,7 @@ async function handleSubmit() {
 <template>
   <div class="soft-scrollbar flex h-full flex-1 flex-col overflow-y-auto px-5 py-6 lg:px-8">
     <div class="space-y-6">
-      <SectionHeading
-        eyebrow="Profile"
-        title="个人资料"
-        description="当前版本可以维护昵称和头像地址，侧栏与个人中心会同步展示。"
-      />
+      <SectionHeading eyebrow="Profile" title="个人资料" />
 
       <div class="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <SurfaceCard>
@@ -136,9 +132,6 @@ async function handleSubmit() {
                 clearable
               />
             </el-form-item>
-            <p class="text-xs leading-5 text-slate-400">
-              当前后端支持保存外部头像 URL；如果留空，将回退为用户名首字母头像。
-            </p>
             <button
               type="button"
               class="mt-3 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"

@@ -136,7 +136,11 @@ export function installRouterGuards(instance: typeof router, pinia: Pinia) {
     }
 
     if (guestOnly && authStore.isAuthenticated) {
-      return authStore.isAdmin ? { name: 'dashboard' } : { name: 'forbidden' };
+      if (authStore.isAdmin) {
+        return { name: 'dashboard' };
+      }
+
+      return true;
     }
 
     if (requiresAdmin && !authStore.isAdmin) {

@@ -155,7 +155,7 @@
   - `POST /api/v1/sessions/{sessionId}/messages/{messageId}/regenerate` 当前返回 `501`
   - `POST /api/v1/sessions/{sessionId}/stream/stop` 当前返回 `501`
 - 管理端接口整体仍为占位，当前全部返回 `501`
-- `pdf` 文档虽然可以上传，但 worker 目前会把 ingest 任务标记为 `failed`
+- 文本型 `pdf` 文档当前已可上传并入库；扫描件或纯图片型 `pdf` 会因 OCR 未实现而失败
 - embedding 与检索仍是占位实现，聊天相关真实 RAG 结果还不能验证
 
 ### 5.3 对前端范围的直接影响
@@ -383,7 +383,7 @@ frontend/
 - 引用展示：助手消息下方显示文档名列表
 - “未命中知识库”提示：作为助手消息头部标签
 - 文档处理状态：在知识库详情页轮询文档列表状态
-- `pdf` 上传：前端首期不做额外预处理，按后端结果提示
+- `pdf` 上传：前端首期不做额外预处理；扫描件或纯图片型 `pdf` 按后端结果提示 OCR 未实现
 
 ### 10.5 视觉方向补充
 

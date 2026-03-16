@@ -190,7 +190,6 @@ async function handleDelete(knowledgeBaseId: string) {
       <SectionHeading
         eyebrow="Knowledge bases"
         title="知识库"
-        description="这里直接接通真实后端知识库接口。进入详情页后可以上传文档、查看状态轮询并触发重建索引。"
       >
         <template #actions>
           <button
@@ -205,11 +204,8 @@ async function handleDelete(knowledgeBaseId: string) {
 
       <SurfaceCard>
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div class="max-w-xl">
-            <p class="text-sm font-medium text-slate-900">按名称快速筛选当前资料库</p>
-            <p class="mt-1 text-sm leading-6 text-slate-500">
-              列表页只保留入口信息；文档状态和配置细节下沉到详情页。
-            </p>
+          <div>
+            <p class="text-sm font-medium text-slate-900">按名称筛选知识库</p>
           </div>
           <div class="flex w-full max-w-lg gap-3">
             <el-input
@@ -248,7 +244,7 @@ async function handleDelete(knowledgeBaseId: string) {
               <div class="space-y-2">
                 <h3 class="font-serif text-[1.7rem] leading-tight text-slate-900">{{ item.name }}</h3>
                 <p class="text-sm leading-6 text-slate-500">
-                  {{ shortenText(item.description || '当前知识库还没有摘要说明。', 96) }}
+                  {{ shortenText(item.description || '暂无摘要', 96) }}
                 </p>
               </div>
               <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
@@ -294,7 +290,7 @@ async function handleDelete(knowledgeBaseId: string) {
       <EmptyStatePanel
         v-else
         title="先创建一个知识库"
-        description="V1 前端已经可以直接管理知识库、上传文档并轮询状态。创建后即可进入详情页继续整理资料。"
+        description="创建后即可进入详情页管理文档和配置。"
         action-label="立即创建"
         @action="openCreateDialog"
       />
@@ -322,7 +318,7 @@ async function handleDelete(knowledgeBaseId: string) {
           <el-input
             v-model="form.embedding_model"
             :disabled="dialogMode === 'edit'"
-            placeholder="填写与后端配置一致的标识"
+            placeholder="填写 embedding model 标识"
           />
         </el-form-item>
         <div class="grid gap-4 md:grid-cols-2">
