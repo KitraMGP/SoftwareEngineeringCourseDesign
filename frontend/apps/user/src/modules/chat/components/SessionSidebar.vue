@@ -37,17 +37,25 @@ const emit = defineEmits<{
 function sessionTitle(session: Session): string {
   return session.name || '未命名会话';
 }
+
+function sessionContext(session: Session): string {
+  return session.knowledge_base_name || '通用会话';
+}
+
+function sessionMode(session: Session): string {
+  return session.knowledge_base_name ? '知识库会话' : '普通会话';
+}
 </script>
 
 <template>
   <aside
-    class="flex h-full w-[88vw] max-w-[320px] shrink-0 flex-col rounded-[32px] border border-white/60 bg-white/72 p-4 shadow-frost backdrop-blur-2xl lg:h-[calc(100vh-3rem)]"
-    :class="collapsed ? 'lg:w-[108px]' : 'lg:w-[300px]'"
+    class="flex h-full w-[84vw] max-w-[296px] shrink-0 flex-col rounded-[28px] border border-white/68 bg-white/78 p-4 shadow-soft backdrop-blur-xl lg:h-[calc(100vh-2.5rem)]"
+    :class="collapsed ? 'lg:w-[96px]' : 'lg:w-[272px]'"
   >
     <div class="flex items-center justify-between gap-3">
       <div v-if="!collapsed" class="space-y-1">
         <p class="text-xs uppercase tracking-[0.34em] text-slate-400">Workspace</p>
-        <h2 class="font-serif text-2xl text-slate-900">对话台</h2>
+        <h2 class="font-serif text-[1.7rem] leading-none text-slate-900">对话台</h2>
       </div>
       <button
         v-if="$attrs.onToggleCollapse"
@@ -63,7 +71,7 @@ function sessionTitle(session: Session): string {
 
     <button
       type="button"
-      class="mt-5 flex items-center justify-center gap-2 rounded-[20px] bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800"
+      class="mt-5 flex items-center justify-center gap-2 rounded-[18px] bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800"
       @click="emit('create-session')"
     >
       <el-icon><Plus /></el-icon>
@@ -72,14 +80,17 @@ function sessionTitle(session: Session): string {
 
     <button
       type="button"
-      class="mt-3 flex items-center justify-center gap-2 rounded-[18px] border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-white"
+      class="mt-3 flex items-center justify-center gap-2 rounded-[16px] border border-slate-200/80 bg-white/92 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-white"
       @click="emit('open-knowledge-base-drawer')"
     >
       <el-icon><Collection /></el-icon>
       <span v-if="!collapsed">准备知识库</span>
     </button>
 
-    <div v-if="!collapsed && preferredKnowledgeBaseName" class="mt-3 rounded-[18px] bg-slate-900/5 px-4 py-3">
+    <div
+      v-if="!collapsed && preferredKnowledgeBaseName"
+      class="mt-3 rounded-[16px] border border-slate-200/70 bg-slate-50/90 px-4 py-3"
+    >
       <p class="text-xs uppercase tracking-[0.3em] text-slate-400">下一次会话</p>
       <p class="mt-2 text-sm font-medium text-slate-800">
         将绑定到「{{ preferredKnowledgeBaseName }}」
@@ -105,11 +116,11 @@ function sessionTitle(session: Session): string {
           v-for="session in sessions"
           :key="session.id"
           :to="{ name: 'session-detail', params: { sessionId: session.id } }"
-          class="group rounded-[24px] border px-4 py-4 transition"
+          class="group rounded-[20px] border px-4 py-3.5 transition"
           :class="
             activeSessionId === session.id
               ? 'border-slate-900/10 bg-slate-900 text-white shadow-soft'
-              : 'border-white/60 bg-white/85 text-slate-900 hover:border-slate-200 hover:bg-white'
+              : 'border-white/70 bg-white/92 text-slate-900 hover:border-slate-200 hover:bg-white'
           "
         >
           <div class="flex items-start justify-between gap-3">
@@ -117,26 +128,34 @@ function sessionTitle(session: Session): string {
               <p class="truncate text-sm font-semibold">
                 {{ sessionTitle(session) }}
               </p>
-              <p
-                class="mt-2 line-clamp-2 text-xs leading-5"
-                :class="activeSessionId === session.id ? 'text-white/78' : 'text-slate-500'"
-              >
-                {{ shortenText(session.knowledge_base_name || '未绑定知识库，将按空会话上下文展示。', 56) }}
-              </p>
-              <div class="mt-3 flex items-center justify-between gap-2">
+              <div class="mt-2 flex items-center gap-2">
                 <span
-                  class="rounded-full px-2.5 py-1 text-[11px]"
+                  class="max-w-[140px] truncate rounded-full px-2.5 py-1 text-[11px]"
                   :class="
                     activeSessionId === session.id
                       ? 'bg-white/16 text-white/88'
-                      : 'bg-slate-100 text-slate-500'
+                      : 'bg-slate-100 text-slate-600'
                   "
+                >
+                  {{ shortenText(sessionContext(session), 22) }}
+                </span>
+                <span
+                  class="text-[11px]"
+                  :class="activeSessionId === session.id ? 'text-white/70' : 'text-slate-400'"
                 >
                   {{ formatRelativeTime(session.updated_at) }}
                 </span>
+              </div>
+              <div class="mt-3 flex items-center justify-between gap-2">
+                <span
+                  class="text-[11px]"
+                  :class="activeSessionId === session.id ? 'text-white/78' : 'text-slate-500'"
+                >
+                  {{ sessionMode(session) }}
+                </span>
                 <button
                   type="button"
-                  class="text-[11px] font-medium"
+                  class="text-[11px] font-medium opacity-70 transition group-hover:opacity-100"
                   :class="activeSessionId === session.id ? 'text-white/84' : 'text-slate-400'"
                   @click.prevent.stop="emit('delete-session', session.id)"
                 >

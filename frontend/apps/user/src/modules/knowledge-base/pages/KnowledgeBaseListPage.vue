@@ -205,13 +205,13 @@ async function handleDelete(knowledgeBaseId: string) {
 
       <SurfaceCard>
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p class="text-sm font-medium text-slate-900">按名称搜索当前资料库</p>
-            <p class="mt-2 text-sm leading-6 text-slate-500">
-              列表页聚焦入口和基础配置，文档数量与处理状态请进入详情查看。
+          <div class="max-w-xl">
+            <p class="text-sm font-medium text-slate-900">按名称快速筛选当前资料库</p>
+            <p class="mt-1 text-sm leading-6 text-slate-500">
+              列表页只保留入口信息；文档状态和配置细节下沉到详情页。
             </p>
           </div>
-          <div class="flex w-full max-w-xl gap-3">
+          <div class="flex w-full max-w-lg gap-3">
             <el-input
               v-model="keyword"
               placeholder="输入知识库名称关键字"
@@ -220,7 +220,7 @@ async function handleDelete(knowledgeBaseId: string) {
             />
             <button
               type="button"
-              class="min-w-[96px] whitespace-nowrap rounded-full border border-slate-200 px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              class="min-w-[92px] whitespace-nowrap rounded-full border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               @click="submitSearch"
             >
               搜索
@@ -237,7 +237,7 @@ async function handleDelete(knowledgeBaseId: string) {
         />
       </div>
 
-      <div v-else-if="knowledgeBasesQuery.data.value?.items.length" class="grid gap-5 lg:grid-cols-2">
+      <div v-else-if="knowledgeBasesQuery.data.value?.items.length" class="grid gap-4 lg:grid-cols-2">
         <SurfaceCard
           v-for="item in knowledgeBasesQuery.data.value.items"
           :key="item.id"
@@ -246,7 +246,7 @@ async function handleDelete(knowledgeBaseId: string) {
           <div>
             <div class="flex items-start justify-between gap-4">
               <div class="space-y-2">
-                <h3 class="font-serif text-2xl text-slate-900">{{ item.name }}</h3>
+                <h3 class="font-serif text-[1.7rem] leading-tight text-slate-900">{{ item.name }}</h3>
                 <p class="text-sm leading-6 text-slate-500">
                   {{ shortenText(item.description || '当前知识库还没有摘要说明。', 96) }}
                 </p>
@@ -256,19 +256,17 @@ async function handleDelete(knowledgeBaseId: string) {
               </span>
             </div>
 
-            <div class="mt-5 grid gap-3 text-sm text-slate-500 md:grid-cols-2">
-              <div class="rounded-[18px] bg-slate-50 px-4 py-3">
-                <p class="text-xs uppercase tracking-[0.26em] text-slate-400">Embedding</p>
-                <p class="mt-2 font-medium text-slate-700">{{ item.embedding_model }}</p>
-              </div>
-              <div class="rounded-[18px] bg-slate-50 px-4 py-3">
-                <p class="text-xs uppercase tracking-[0.26em] text-slate-400">更新时间</p>
-                <p class="mt-2 font-medium text-slate-700">{{ formatDateTime(item.updated_at) }}</p>
-              </div>
+            <div class="mt-4 flex flex-wrap gap-2 text-xs">
+              <span class="rounded-full bg-slate-100 px-3 py-1.5 text-slate-500">
+                Embedding {{ shortenText(item.embedding_model, 24) }}
+              </span>
+              <span class="rounded-full bg-slate-100 px-3 py-1.5 text-slate-500">
+                更新于 {{ formatDateTime(item.updated_at) }}
+              </span>
             </div>
           </div>
 
-          <div class="mt-6 flex flex-wrap items-center gap-3">
+          <div class="mt-5 flex flex-wrap items-center gap-4">
             <router-link
               class="rounded-full bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
               :to="{ name: 'knowledge-base-detail', params: { kbId: item.id } }"
@@ -277,14 +275,14 @@ async function handleDelete(knowledgeBaseId: string) {
             </router-link>
             <button
               type="button"
-              class="rounded-full border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              class="text-sm font-medium text-slate-600 transition hover:text-slate-900"
               @click="openEditDialog(item)"
             >
               编辑
             </button>
             <button
               type="button"
-              class="rounded-full border border-transparent px-4 py-2.5 text-sm font-medium text-rose-500 transition hover:bg-rose-50"
+              class="text-sm font-medium text-rose-500 transition hover:text-rose-600"
               @click="handleDelete(item.id)"
             >
               删除

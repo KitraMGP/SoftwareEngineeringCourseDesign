@@ -6,15 +6,16 @@ import { useAuthStore } from '@private-kb/shared/auth/useAuthStore';
 
 import AuthLayout from '../layouts/AuthLayout.vue';
 import UserWorkspaceLayout from '../layouts/UserWorkspaceLayout.vue';
-import LoginPage from '../modules/auth/pages/LoginPage.vue';
-import RegisterPage from '../modules/auth/pages/RegisterPage.vue';
-import AboutPage from '../modules/about/pages/AboutPage.vue';
-import ChatHomePage from '../modules/chat/pages/ChatHomePage.vue';
-import SessionPage from '../modules/chat/pages/SessionPage.vue';
-import KnowledgeBaseDetailPage from '../modules/knowledge-base/pages/KnowledgeBaseDetailPage.vue';
-import KnowledgeBaseListPage from '../modules/knowledge-base/pages/KnowledgeBaseListPage.vue';
-import ProfilePage from '../modules/me/pages/ProfilePage.vue';
-import SecurityPage from '../modules/me/pages/SecurityPage.vue';
+
+const LoginPage = () => import('../modules/auth/pages/LoginPage.vue');
+const RegisterPage = () => import('../modules/auth/pages/RegisterPage.vue');
+const AboutPage = () => import('../modules/about/pages/AboutPage.vue');
+const ChatHomePage = () => import('../modules/chat/pages/ChatHomePage.vue');
+const SessionPage = () => import('../modules/chat/pages/SessionPage.vue');
+const KnowledgeBaseListPage = () => import('../modules/knowledge-base/pages/KnowledgeBaseListPage.vue');
+const KnowledgeBaseDetailPage = () => import('../modules/knowledge-base/pages/KnowledgeBaseDetailPage.vue');
+const ProfilePage = () => import('../modules/me/pages/ProfilePage.vue');
+const SecurityPage = () => import('../modules/me/pages/SecurityPage.vue');
 
 declare module 'vue-router' {
   interface RouteMeta {

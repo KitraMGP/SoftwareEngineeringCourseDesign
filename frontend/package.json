@@ -1,6 +1,7 @@
 {
   "name": "private-kb-frontend-workspace",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev:user": "pnpm --filter @private-kb/user dev",

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 
 import { authApi } from '../api/auth';
 import type { LoginPayload, User } from '../types/domain';
+import { normalizeApiError } from '../utils/errors';
 import { clearStoredAccessToken, readStoredAccessToken, writeStoredAccessToken } from './token';
 
 let bootstrapPromise: Promise<void> | null = null;
@@ -59,8 +60,15 @@ export const useAuthStore = defineStore('shared-auth', {
       this.isBootstrapping = true;
       bootstrapPromise = (async () => {
         try {
-          await this.refreshAccessToken();
-          await this.fetchCurrentUser();
+          if (await this.tryRestoreFromStoredAccessToken()) {
+            return;
+          }
+
+          if (await this.tryRestoreFromRefreshToken()) {
+            return;
+          }
+
+          this.clearAuth();
         } catch {
           this.clearAuth();
         } finally {
@@ -73,6 +81,42 @@ export const useAuthStore = defineStore('shared-auth', {
         await bootstrapPromise;
       } finally {
         bootstrapPromise = null;
+      }
+    },
+
+    async tryRestoreFromStoredAccessToken(): Promise<boolean> {
+      if (!this.accessToken) {
+        return false;
+      }
+
+      try {
+        await this.fetchCurrentUser();
+        return true;
+      } catch (error) {
+        this.user = null;
+        const normalized = normalizeApiError(error);
+
+        if (normalized.status && normalized.status !== 401) {
+          throw normalized;
+        }
+
+        return false;
+      }
+    },
+
+    async tryRestoreFromRefreshToken(): Promise<boolean> {
+      try {
+        await this.refreshAccessToken();
+        await this.fetchCurrentUser();
+        return true;
+      } catch (error) {
+        const normalized = normalizeApiError(error);
+
+        if (normalized.status && normalized.status !== 401) {
+          throw normalized;
+        }
+
+        return false;
       }
     },
 

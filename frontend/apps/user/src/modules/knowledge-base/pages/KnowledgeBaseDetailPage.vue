@@ -6,14 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import {
-  AppStatusBadge,
-  SectionHeading,
-  StatPanel,
-  SurfaceCard,
-  knowledgeBaseApi,
-  queryKeys
-} from '@private-kb/shared';
+import { AppStatusBadge, SectionHeading, SurfaceCard, knowledgeBaseApi, queryKeys } from '@private-kb/shared';
 import { formatDateTime } from '@private-kb/shared/utils/date';
 import { formatBytes } from '@private-kb/shared/utils/format';
 import { getErrorMessage, toFieldErrorMap } from '@private-kb/shared/utils/errors';
@@ -131,6 +124,11 @@ const deleteDocumentMutation = useMutation({
   }
 });
 
+const documents = computed(() => documentsQuery.data.value?.items || []);
+const hasProcessingDocuments = computed(() =>
+  documents.value.some((item) => ['pending', 'processing', 'deleting'].includes(item.status))
+);
+
 function openEditDialog() {
   const knowledgeBase = knowledgeBaseQuery.data.value;
   if (!knowledgeBase) {
@@ -236,21 +234,21 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
         <template #actions>
           <button
             type="button"
-            class="rounded-full border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            class="rounded-full border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
             @click="openEditDialog"
           >
             编辑
           </button>
           <button
             type="button"
-            class="rounded-full border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            class="rounded-full border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
             @click="reindexMutation.mutate()"
           >
             重建索引
           </button>
           <button
             type="button"
-            class="rounded-full border border-transparent px-4 py-2.5 text-sm font-medium text-rose-500 transition hover:bg-rose-50"
+            class="rounded-full border border-transparent px-3.5 py-2 text-sm font-medium text-rose-500 transition hover:bg-rose-50"
             @click="confirmDeleteKnowledgeBase"
           >
             删除
@@ -258,38 +256,94 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
         </template>
       </SectionHeading>
 
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatPanel
-          label="Embedding"
-          :value="knowledgeBaseQuery.data.value?.embedding_model || '--'"
-          helper="当前与后端实际存储字段保持一致"
-        />
-        <StatPanel
-          label="Documents"
-          :value="String(documentsQuery.data.value?.items.length || 0)"
-          helper="列表中会持续轮询处理中状态"
-        />
-        <StatPanel
-          label="Last Indexed"
-          :value="knowledgeBaseQuery.data.value?.last_indexed_at ? formatDateTime(knowledgeBaseQuery.data.value.last_indexed_at) : '未建立'"
-          helper="重建索引会生成新的后台任务"
-        />
-        <StatPanel
-          label="Updated"
-          :value="knowledgeBaseQuery.data.value?.updated_at ? formatDateTime(knowledgeBaseQuery.data.value.updated_at) : '--'"
-          helper="保留最近一次知识库配置更新时间"
-        />
+      <div class="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+        <SurfaceCard tone="soft">
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Documents</p>
+              <p class="mt-3 font-serif text-4xl text-slate-900">{{ documents.length }}</p>
+              <p class="mt-2 text-sm leading-6 text-slate-500">文档数量直接反映当前知识库的可用资料体量。</p>
+            </div>
+
+            <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Retrieval</p>
+              <div class="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+                <div>
+                  <p class="text-xs uppercase tracking-[0.22em] text-slate-400">Top K</p>
+                  <p class="mt-1 text-lg font-semibold text-slate-900">
+                    {{ knowledgeBaseQuery.data.value?.retrieval_top_k ?? '--' }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs uppercase tracking-[0.22em] text-slate-400">Threshold</p>
+                  <p class="mt-1 text-lg font-semibold text-slate-900">
+                    {{ knowledgeBaseQuery.data.value?.similarity_threshold ?? '--' }}
+                  </p>
+                </div>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-slate-500">检索参数保留为中等强调，避免和核心计数抢层级。</p>
+            </div>
+
+            <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Embedding</p>
+              <p class="mt-3 break-all text-base font-semibold text-slate-900">
+                {{ knowledgeBaseQuery.data.value?.embedding_model || '--' }}
+              </p>
+              <p class="mt-3 text-sm leading-6 text-slate-500">保持为普通信息密度，不再用超大字号把模型名撑开。</p>
+            </div>
+
+            <div class="rounded-[20px] border border-white/80 bg-white/88 px-5 py-4">
+              <p class="text-xs uppercase tracking-[0.28em] text-slate-400">Timeline</p>
+              <div class="mt-3 space-y-3 text-sm text-slate-600">
+                <div>
+                  <p class="text-xs uppercase tracking-[0.22em] text-slate-400">Last Indexed</p>
+                  <p class="mt-1 font-medium text-slate-900">
+                    {{ knowledgeBaseQuery.data.value?.last_indexed_at ? formatDateTime(knowledgeBaseQuery.data.value.last_indexed_at) : '未建立' }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs uppercase tracking-[0.22em] text-slate-400">Updated</p>
+                  <p class="mt-1 font-medium text-slate-900">
+                    {{ knowledgeBaseQuery.data.value?.updated_at ? formatDateTime(knowledgeBaseQuery.data.value.updated_at) : '--' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard tone="soft">
+          <p class="text-xs uppercase tracking-[0.3em] text-slate-400">当前状态</p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <AppStatusBadge :tone="hasProcessingDocuments ? 'warning' : 'success'">
+              {{ hasProcessingDocuments ? '文档轮询中' : '文档状态稳定' }}
+            </AppStatusBadge>
+            <AppStatusBadge tone="warning">PDF 处理受限</AppStatusBadge>
+          </div>
+          <p class="mt-4 text-sm leading-6 text-slate-500">
+            当前页面把真正需要高亮的内容收敛为文档状态和检索配置。PDF 仍会在处理阶段失败，但不再占据大段首屏正文。
+          </p>
+          <div class="mt-5 rounded-[18px] border border-white/80 bg-white/88 px-4 py-4">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-400">最近更新</p>
+            <p class="mt-2 text-sm font-medium text-slate-900">
+              {{ knowledgeBaseQuery.data.value?.updated_at ? formatDateTime(knowledgeBaseQuery.data.value.updated_at) : '--' }}
+            </p>
+          </div>
+        </SurfaceCard>
       </div>
 
       <SurfaceCard>
-        <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div class="space-y-4">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div class="max-w-2xl space-y-4">
             <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Upload documents</p>
-            <h3 class="font-serif text-2xl text-slate-900">上传资料并等待处理完成</h3>
+            <h3 class="font-serif text-[1.8rem] leading-tight text-slate-900">上传资料并等待处理完成</h3>
             <p class="text-sm leading-6 text-slate-500">
-              当前后端会接受 txt、markdown、docx 和 pdf。需要注意的是，pdf
-              目前会先完成上传，再在处理阶段失败，失败原因会回写到列表状态中。
+              上传区只保留单文件入口，完成后自动刷新文档列表。若你上传 PDF，当前后端会先接受文件，再在处理阶段将其标记为失败。
             </p>
+            <div class="flex flex-wrap gap-2">
+              <AppStatusBadge tone="info">支持 txt / md / docx</AppStatusBadge>
+              <AppStatusBadge tone="warning">PDF 处理阶段会失败</AppStatusBadge>
+            </div>
           </div>
 
           <el-upload
@@ -298,7 +352,7 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
             :show-file-list="false"
             :http-request="handleUploadRequest"
             accept=".txt,.md,.markdown,.docx,.pdf"
-            class="rounded-[28px] border border-dashed border-slate-200 bg-white/70"
+            class="w-full max-w-[380px] rounded-[24px] border border-dashed border-slate-200 bg-white/78"
           >
             <div class="py-4 text-center">
               <p class="text-base font-medium text-slate-900">拖拽文件到这里，或点击上传</p>
@@ -314,29 +368,15 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
         <div class="flex items-center justify-between gap-4">
           <div>
             <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Document list</p>
-            <h3 class="mt-2 font-serif text-2xl text-slate-900">文档处理进度</h3>
+            <h3 class="mt-2 font-serif text-[1.8rem] leading-tight text-slate-900">文档处理进度</h3>
           </div>
-          <AppStatusBadge
-            :tone="
-              (documentsQuery.data.value?.items || []).some((item) =>
-                ['pending', 'processing', 'deleting'].includes(item.status)
-              )
-                ? 'warning'
-                : 'success'
-            "
-          >
-            {{
-              (documentsQuery.data.value?.items || []).some((item) =>
-                ['pending', 'processing', 'deleting'].includes(item.status)
-              )
-                ? '轮询中'
-                : '已稳定'
-            }}
+          <AppStatusBadge :tone="hasProcessingDocuments ? 'warning' : 'success'">
+            {{ hasProcessingDocuments ? '轮询中' : '已稳定' }}
           </AppStatusBadge>
         </div>
 
-        <div v-if="documentsQuery.data.value?.items.length" class="mt-5 overflow-x-auto">
-          <table class="min-w-full border-separate border-spacing-y-3">
+        <div v-if="documents.length" class="mt-5 overflow-x-auto">
+          <table class="min-w-full border-separate border-spacing-y-2">
             <thead>
               <tr class="text-left text-xs uppercase tracking-[0.28em] text-slate-400">
                 <th class="px-4">文档</th>
@@ -349,11 +389,11 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
             </thead>
             <tbody>
               <tr
-                v-for="document in documentsQuery.data.value.items"
+                v-for="document in documents"
                 :key="document.id"
-                class="rounded-[20px] bg-white"
+                class="rounded-[18px] bg-white/88"
               >
-                <td class="rounded-l-[20px] px-4 py-4">
+                <td class="rounded-l-[18px] px-4 py-4">
                   <div class="space-y-1">
                     <p class="font-medium text-slate-900">
                       {{ document.title || document.original_filename || '未命名文档' }}
@@ -378,7 +418,7 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
                 <td class="px-4 py-4 text-sm text-slate-500">
                   {{ formatDateTime(document.updated_at) }}
                 </td>
-                <td class="rounded-r-[20px] px-4 py-4">
+                <td class="rounded-r-[18px] px-4 py-4">
                   <div class="flex gap-3 text-sm">
                     <button
                       type="button"
@@ -403,7 +443,7 @@ function statusTone(status: string): 'info' | 'success' | 'warning' | 'danger' {
 
         <div
           v-else
-          class="mt-5 rounded-[24px] border border-dashed border-slate-200 bg-white/70 px-5 py-8 text-sm leading-6 text-slate-500"
+          class="mt-5 rounded-[20px] border border-dashed border-slate-200 bg-white/75 px-5 py-7 text-sm leading-6 text-slate-500"
         >
           当前还没有文档。上传首个文件后，系统会在这里展示 pending、processing、available 或 failed
           等状态变化。

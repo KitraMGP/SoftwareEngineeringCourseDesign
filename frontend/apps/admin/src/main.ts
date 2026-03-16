@@ -1,12 +1,11 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
-import ElementPlus from 'element-plus';
-import zhCn from 'element-plus/es/locale/lang/zh-cn';
 import 'element-plus/dist/index.css';
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 
 import { configureApiClient, createQueryClientDefaults } from '@private-kb/shared/api/http';
 import { useAuthStore } from '@private-kb/shared/auth/useAuthStore';
+import { installElementPlus } from '@private-kb/shared/utils/installElementPlus';
 
 import App from './App.vue';
 import router, { installRouterGuards } from './router';
@@ -36,6 +35,6 @@ configureApiClient({
 installRouterGuards(router, pinia);
 
 app.use(router);
-app.use(ElementPlus, { locale: zhCn });
+installElementPlus(app);
 app.use(VueQueryPlugin, { queryClient });
 app.mount('#app');

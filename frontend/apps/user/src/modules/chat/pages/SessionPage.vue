@@ -177,16 +177,16 @@ const composerHint = computed(() => {
   }
 
   if (isKnowledgeBoundSession.value) {
-    return '当前会话会先检索知识库；命中资料时会展示引用，未命中时会回退到通用回答。';
+    return '当前会话会先检索资料并在命中时展示引用。';
   }
 
-  return '当前会话会直接使用通用模型回答；若需要检索知识库，可先选择知识库再新建会话。';
+  return '普通会话会直接回答；若要结合资料提问，可先选知识库再新建会话。';
 });
 
 const composerPlaceholder = computed(() =>
   isKnowledgeBoundSession.value
-    ? '输入你的问题，系统会先检索当前知识库。'
-    : '输入你的问题，按 Ctrl/Command + Enter 发送。'
+    ? '输入问题。Enter 发送，Shift+Enter 换行；将先检索当前知识库。'
+    : '输入问题。Enter 发送，Shift+Enter 换行。'
 );
 
 const composerSubmitLabel = computed(() =>
@@ -400,28 +400,30 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-      <div class="shrink-0 border-b border-slate-200/70 px-5 py-5 lg:px-8">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+      <div class="shrink-0 border-b border-slate-200/70 px-5 py-4 lg:px-8">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="min-w-0">
             <p class="text-xs uppercase tracking-[0.32em] text-slate-400">Session overview</p>
-            <h1 class="mt-2 font-serif text-3xl text-slate-900">
-              {{ session?.name || '未命名会话' }}
-            </h1>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <h1 class="font-serif text-[2rem] leading-tight text-slate-900">
+                {{ session?.name || '未命名会话' }}
+              </h1>
+              <AppStatusBadge :tone="session?.knowledge_base_id ? 'success' : 'info'">
+                {{ session?.knowledge_base_name || '未绑定知识库' }}
+              </AppStatusBadge>
+              <AppStatusBadge :tone="capabilityTone">
+                {{ capabilityLabel }}
+              </AppStatusBadge>
+            </div>
             <p class="mt-2 text-sm leading-6 text-slate-500">
               创建于 {{ formatDateTime(session?.created_at) }}，模型标识为 {{ session?.model || DEFAULT_CHAT_MODEL }}。
             </p>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <AppStatusBadge :tone="session?.knowledge_base_id ? 'success' : 'info'">
-              {{ session?.knowledge_base_name || '未绑定知识库' }}
-            </AppStatusBadge>
-            <AppStatusBadge :tone="capabilityTone">
-              {{ capabilityLabel }}
-            </AppStatusBadge>
+          <div class="flex shrink-0 flex-wrap items-center gap-2">
             <button
               type="button"
-              class="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               @click="chatUiStore.openKnowledgeBaseDrawer()"
             >
               {{ session?.knowledge_base_id ? '换一个知识库开始新会话' : '为下一次会话选择知识库' }}
@@ -429,16 +431,15 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <SurfaceCard class="mt-5" :padded="false">
-          <div class="flex flex-wrap items-center gap-3 px-5 py-4 text-sm text-slate-500">
-            <span>当前会话会保留结构和历史记录。</span>
+        <SurfaceCard class="mt-4" tone="soft" :padded="false">
+          <div class="flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-slate-500">
+            <span>当前会话保留历史记录。</span>
             <span class="hidden text-slate-300 md:inline">/</span>
-            <span>切换知识库将从新会话开始，避免上下文混杂。</span>
-            <span class="hidden text-slate-300 md:inline">/</span>
+            <span>切换知识库会从新会话开始，避免上下文混杂。</span>
             <router-link
               v-if="session?.knowledge_base_id"
               :to="{ name: 'knowledge-base-detail', params: { kbId: session.knowledge_base_id } }"
-              class="inline-flex items-center gap-1 text-slate-900 hover:text-brand-night"
+              class="inline-flex items-center gap-1 font-medium text-slate-900 hover:text-brand-night"
             >
               查看当前知识库
               <el-icon><ArrowRight /></el-icon>

@@ -1,9 +1,17 @@
+const path = require('path');
+
+const frontendRoot = __dirname;
+const currentWorkspace = process.cwd();
+const currentAppRoot = currentWorkspace.startsWith(path.join(frontendRoot, 'apps'))
+  ? currentWorkspace
+  : path.join(frontendRoot, 'apps', 'user');
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: {
-    relative: true,
-    files: ['./apps/**/*.{vue,html}', './packages/**/*.vue']
-  },
+  content: [
+    path.join(currentAppRoot, 'src/**/*.{vue,html}'),
+    path.join(frontendRoot, 'packages/shared/src/**/*.{vue,html}')
+  ],
   theme: {
     extend: {
       colors: {

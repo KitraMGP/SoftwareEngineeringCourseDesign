@@ -13,6 +13,7 @@ tmp/*.log
 tmp/build/
 
 frontend/node_modules/
+.pnpm-store/
 frontend/apps/*/dist/
 frontend/playwright-report/
 frontend/test-results/

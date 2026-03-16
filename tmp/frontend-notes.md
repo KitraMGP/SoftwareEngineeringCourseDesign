@@ -238,6 +238,97 @@
   - 前端 URI 校验
   - 头像预览与最近更新时间展示
 - 管理端壳层账户卡片已改为复用头像组件
+
+## 2026-03-16 工作台视觉收敛与输入交互修正
+
+### 本轮目标
+
+- 按页面验收结果收敛用户端工作台首页、聊天页和知识库管理页的视觉密度
+- 修复用户端“整页刷新或直达子路由可能掉回登录页”的鉴权恢复问题
+- 修复聊天输入框不能直接回车发送的问题，并明确 `Shift+Enter` 换行提示
+
+### 本轮实现
+
+- 已调整用户端工作区整体视觉：
+  - 降低全局玻璃拟态强度、阴影和背景装饰对比度
+  - 收窄左侧侧栏，压缩会话卡信息层级
+  - 主工作区容器圆角、背景与阴影已统一收敛
+- 已重做聊天首页信息结构：
+  - 改为“主动作 + 次动作 + 简短状态卡”布局
+  - 去掉首屏厚重的能力大段说明块
+  - 保留会话创建与知识库选择两个核心入口
+- 已优化聊天页：
+  - 收缩顶部状态区和提示条
+  - 降低消息卡和输入区的垂直占用
+  - 用户消息改为更低饱和度样式，assistant 区块减少操作噪声
+  - `重新生成` 按钮已改为悬停显现，避免默认打断阅读
+- 已修复聊天输入交互：
+  - 普通 `Enter` 发送
+  - `Shift+Enter` 保留换行
+  - 输入框占位符已明确标注发送/换行规则
+  - 已避免输入法组合态误发送
+- 已优化知识库列表页：
+  - 搜索区压缩为更扁平的工具条
+  - 卡片标题、元信息和操作区已收敛
+  - 详情入口继续保留为主按钮，编辑/删除降为次级文本操作
+- 已优化知识库详情页：
+  - 取消对 embedding model 和时间字段的超大号统计卡展示
+  - 改为“文档数高强调 + 其余参数中等强调”的信息结构
+  - PDF 限制改为 badge 和简短说明，不再占据大段正文
+  - 上传区和文档列表区已调整为更适合工作台的密度
+- 已修复鉴权恢复问题：
+  - `bootstrap()` 现优先使用 `localStorage` 中的 access token 拉取当前用户
+  - 仅在 access token 无效时回退到 refresh 流程
+  - 因此整页刷新和直达子路由时，不再无条件依赖 refresh 才能恢复登录态
+
+### 本轮自动化测试
+
+- 已新增 `packages/shared/src/auth/useAuthStore.test.ts`
+  - 验证存量 access token 可直接恢复用户态
+  - 验证 access token 失效后会回退 refresh 再恢复用户态
+- 已新增 `apps/user/src/modules/chat/components/MessageComposer.test.ts`
+  - 验证 `Enter` 触发提交
+  - 验证 `Shift+Enter` 不触发提交
+  - 验证输入法组合态与 stop 态不触发提交
+- 已执行 `cd frontend && pnpm test`
+  - 通过
+- 已执行 `cd frontend && pnpm lint`
+  - 通过
+- 已执行 `cd frontend && pnpm typecheck`
+  - 用户端通过
+  - 管理端通过
+- 已执行 `cd frontend && pnpm build`
+  - 用户端通过
+  - 管理端通过
+
+### 本轮浏览器验收
+
+- 已使用浏览器 MCP 验证用户端知识库详情页整页直达
+  - 页面保持已登录态，未跳回登录页
+- 已使用浏览器 MCP 验证用户端会话详情页整页直达
+  - 页面保持已登录态，未跳回登录页
+- 已验证聊天输入框占位符已显示：
+  - `Enter` 发送
+  - `Shift+Enter` 换行
+- 已在真实会话中通过键盘事件触发 `Enter` 发送
+  - 未点击发送按钮
+  - 用户消息与 assistant 回复已成功渲染
+- 已验证 `Shift+Enter` 不触发发送
+  - 事件未被 `preventDefault`
+  - 消息条数保持不变
+- 已分别检查并截图确认：
+  - 工作台首页
+  - 聊天页
+  - 知识库列表页
+  - 知识库详情页
+
+### 当前遗留提示
+
+- 构建仍有既有非阻塞提示：
+  - Sass legacy JS API deprecation
+  - Tailwind content pattern 扫描过宽
+  - user/admin chunk size warning
+- 上述问题与本轮视觉和交互修复无直接冲突，后续可单独治理
 - 已同步修正若干过时文案：
   - 登录页信息卡
   - 关于页 FAQ / 版本说明
@@ -464,3 +555,151 @@
   - 返回 `200`
   - 被停止的那一轮消息最终只保留 user 消息，未落库 assistant 回复
 - 本轮浏览器检查未发现新的控制台错误
+
+## 2026-03-16 前端构建告警收敛
+
+### 本轮目标
+
+- 解决上一轮遗留的非阻塞工具链问题：
+  - Sass legacy JS API deprecation
+  - Tailwind content 扫描范围警告
+  - Rollup chunk size warning
+  - 手工分包引入的 circular chunk warning
+  - Vitest 的 Vite CJS Node API deprecation 提示
+
+### 本轮实现
+
+- 已新增共享工具：
+  - `packages/shared/src/utils/installElementPlus.ts`
+- Element Plus 已从两个应用入口的全量 `app.use(ElementPlus)` 改为按需组件注册
+  - 同时继续通过 `provideGlobalConfig` 注入中文 locale
+  - 这样避免把整套组件插件一起打进首包
+- Vite 共享配置已调整：
+  - 保留 `scss.api = "modern-compiler"`，Sass legacy JS API 告警已消失
+  - 移除上一轮用于强拆 vendor 的 `manualChunks` 逻辑，避免继续产生循环分包告警
+- Tailwind 配置已改为基于当前构建应用的精确扫描：
+  - 当前 app 的 `src/**/*.{vue,html}`
+  - `packages/shared/src/**/*.{vue,html}`
+  - 不再扫描整个 `apps/**/*` 或过宽的父级路径
+- 前端 workspace 根包已声明 `type: module`
+  - Vitest 不再触发 Vite CJS Node API deprecation 提示
+- `packages/shared/package.json` 已补齐 `element-plus` 依赖声明
+- 已执行一次 `pnpm install --no-frozen-lockfile`
+  - 用于同步 workspace 依赖链接和 lockfile
+
+### 本轮验证
+
+- 已完成 `cd frontend && pnpm lint`
+  - 通过
+- 已完成 `cd frontend && pnpm typecheck`
+  - user / admin 均通过
+- 已完成 `cd frontend && pnpm test`
+  - 4 个测试文件、8 个测试全部通过
+- 已完成 `cd frontend && pnpm build`
+  - user / admin 均通过
+- 当前构建输出已不再出现：
+  - Sass legacy JS API 警告
+  - Tailwind content pattern 警告
+  - Rollup chunk size warning
+  - circular chunk warning
+  - Vitest 的 Vite CJS Node API 警告
+
+### 当前产物观察
+
+- user 端主入口 JS 约 `417.19 kB`
+- admin 端主入口 JS 约 `366.17 kB`
+- 两侧主入口都已低于默认的 Rollup chunk warning 阈值
+
+### 额外说明
+
+- 本轮尝试对 `http://127.0.0.1:5173` 与 `http://127.0.0.1:5174` 做运行态烟雾检查时，端口均未启动
+- 因遵循“默认不替用户长期启动 dev server”的约定，本轮未额外拉起前端服务
+
+## 2026-03-16 聊天输入框高度与 Markdown 渲染修复
+
+### 问题现象
+
+- 用户端聊天页底部问题输入框默认高度仍然偏高
+- 在消息较长时，会进一步压缩可视消息区域
+- 会话消息当前仍按纯文本展示
+- assistant 回复中的标题、列表、代码块、链接等 Markdown 结构无法阅读
+
+### 本轮实现
+
+- 已收紧聊天输入区视觉占高：
+  - `MessageComposer.vue` 默认从 `rows=2` 调整为 `rows=1`
+  - 缩小输入区外层内边距、按钮行间距和按钮垂直 padding
+  - 将默认 placeholder 改为更短文案，减少初始换行
+  - 新增 textarea 自适应高度逻辑
+    - 初始高度更低
+    - 随输入内容增长自动扩展
+    - 最高限制为 `128px`
+- 已新增本地安全 Markdown 渲染工具：
+  - `apps/user/src/modules/chat/utils/renderMarkdown.ts`
+  - 支持：
+    - 标题
+    - 段落与换行
+    - 无序/有序列表
+    - 引用块
+    - 行内代码与 fenced code block
+    - 粗体 / 斜体 / 删除线
+    - 安全链接
+  - 原始 HTML 会被转义
+  - `javascript:` 等危险链接不会注入
+- `MessageThread.vue` 已改为渲染安全 Markdown HTML
+  - 并补充了标题、列表、引用、代码块、链接等消息样式
+
+### 本轮测试
+
+- 已新增：
+  - `apps/user/src/modules/chat/utils/renderMarkdown.test.ts`
+  - `apps/user/src/modules/chat/components/MessageThread.test.ts`
+- 已更新：
+  - `apps/user/src/modules/chat/components/MessageComposer.test.ts`
+- 已完成 `cd frontend && pnpm lint`
+  - 通过
+- 已完成 `cd frontend && pnpm typecheck`
+  - user / admin 均通过
+- 已完成 `cd frontend && pnpm test`
+  - 6 个测试文件、12 个测试全部通过
+- 已完成 `cd frontend && pnpm build`
+  - user / admin 均通过
+
+### 运行态说明
+
+- 当前本地未检测到可直接复用的前端 dev server 或后端接口服务
+- 因此本轮主要以组件级单测、类型检查和生产构建作为验收依据
+
+## 2026-03-16 Markdown 列表缩进兼容修复
+
+### 问题现象
+
+- 上一轮接入 Markdown 渲染后，普通标题、段落和代码块已可显示
+- 但真实回复中若列表项带有前导缩进，`* **技术实现**` 这类内容仍会退回为普通段落
+- 页面上会直接看到原始星号，而不是渲染后的列表项
+
+### 根因
+
+- 自定义 Markdown 解析器在 block 级识别列表、引用和标题时，对前导空白不够宽容
+- 导致模型常见的“缩进后再输出列表”的文本形态未被识别为列表块
+
+### 修复内容
+
+- 已调整 `apps/user/src/modules/chat/utils/renderMarkdown.ts`
+  - block 级匹配前统一使用 `trimStart()`
+  - 无序/有序列表、引用块、标题、block boundary 判断均已兼容前导缩进
+- 已补充针对真实回复形态的单测
+  - 覆盖“标题 + 缩进列表 + 加粗文本”的混合内容
+
+### 本轮验证
+
+- 已完成 `cd frontend && pnpm test -- renderMarkdown MessageThread`
+  - 通过
+- 已完成 `cd frontend && pnpm test`
+  - 6 个测试文件、13 个测试全部通过
+- 已完成 `cd frontend && pnpm lint`
+  - 通过
+- 已完成 `cd frontend && pnpm typecheck`
+  - user / admin 均通过
+- 已完成 `cd frontend && pnpm build`
+  - user / admin 均通过

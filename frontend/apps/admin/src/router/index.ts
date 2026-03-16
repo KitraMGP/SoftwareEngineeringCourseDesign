@@ -6,15 +6,16 @@ import { useAuthStore } from '@private-kb/shared/auth/useAuthStore';
 
 import AdminAuthLayout from '../layouts/AdminAuthLayout.vue';
 import AdminShellLayout from '../layouts/AdminShellLayout.vue';
-import AccessDeniedPage from '../modules/access/pages/AccessDeniedPage.vue';
-import AdminLoginPage from '../modules/auth/pages/AdminLoginPage.vue';
-import AuditPage from '../modules/audit/pages/AuditPage.vue';
-import DashboardPage from '../modules/dashboard/pages/DashboardPage.vue';
-import ProvidersPage from '../modules/providers/pages/ProvidersPage.vue';
-import GeneralSettingsPage from '../modules/settings/pages/GeneralSettingsPage.vue';
-import QuotaSettingsPage from '../modules/settings/pages/QuotaSettingsPage.vue';
-import TasksPage from '../modules/tasks/pages/TasksPage.vue';
-import UsersPage from '../modules/users/pages/UsersPage.vue';
+
+const AccessDeniedPage = () => import('../modules/access/pages/AccessDeniedPage.vue');
+const AdminLoginPage = () => import('../modules/auth/pages/AdminLoginPage.vue');
+const DashboardPage = () => import('../modules/dashboard/pages/DashboardPage.vue');
+const UsersPage = () => import('../modules/users/pages/UsersPage.vue');
+const ProvidersPage = () => import('../modules/providers/pages/ProvidersPage.vue');
+const TasksPage = () => import('../modules/tasks/pages/TasksPage.vue');
+const AuditPage = () => import('../modules/audit/pages/AuditPage.vue');
+const GeneralSettingsPage = () => import('../modules/settings/pages/GeneralSettingsPage.vue');
+const QuotaSettingsPage = () => import('../modules/settings/pages/QuotaSettingsPage.vue');
 
 declare module 'vue-router' {
   interface RouteMeta {
