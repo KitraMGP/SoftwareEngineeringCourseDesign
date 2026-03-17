@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -172,6 +173,7 @@ func TestSendMessageStreamWithKnowledgeBaseRetrieval(t *testing.T) {
 	chunkID := uuid.New()
 	kbName := "Course Design Docs"
 	promptTemplate := "Answer in concise Chinese."
+	fixedNow := time.Date(2026, 3, 17, 16, 30, 45, 0, time.FixedZone("CST", 8*3600))
 
 	repo := &stubChatRepository{
 		detail: &SessionDetail{
@@ -218,10 +220,13 @@ func TestSendMessageStreamWithKnowledgeBaseRetrieval(t *testing.T) {
 
 	service := NewServiceWithRAG(repo, retriever, provider, ServiceConfig{
 		DefaultModel:       "deepseek-chat",
-		SystemPrompt:       "You are a helpful assistant.",
+		SystemPrompt:       "你是课程设计知识库问答助手。",
 		RequestTimeout:     10 * time.Second,
 		MaxHistoryMessages: 8,
 		Temperature:        0.3,
+		Now: func() time.Time {
+			return fixedNow
+		},
 	})
 
 	if err := service.SendMessageStream(context.Background(), userID, sessionID, "请总结系统架构。", stream); err != nil {
@@ -258,11 +263,23 @@ func TestSendMessageStreamWithKnowledgeBaseRetrieval(t *testing.T) {
 	if len(provider.receivedInput.Messages) < 2 {
 		t.Fatalf("expected provider to receive system + kb prompt messages, got %d", len(provider.receivedInput.Messages))
 	}
+	if provider.receivedInput.Messages[0].Role != "system" {
+		t.Fatalf("expected first provider message to be system prompt, got %q", provider.receivedInput.Messages[0].Role)
+	}
+	if !strings.Contains(provider.receivedInput.Messages[0].Content, "你是课程设计知识库问答助手。") {
+		t.Fatalf("expected global system prompt to be included, got %q", provider.receivedInput.Messages[0].Content)
+	}
+	if !strings.Contains(provider.receivedInput.Messages[0].Content, "当前 UTC 时间：2026-03-17T08:30:45Z") {
+		t.Fatalf("expected UTC time in system prompt, got %q", provider.receivedInput.Messages[0].Content)
+	}
+	if !strings.Contains(provider.receivedInput.Messages[0].Content, "当前服务端本地时间（CST，UTC+08:00）：2026-03-17T16:30:45+08:00") {
+		t.Fatalf("expected local time in system prompt, got %q", provider.receivedInput.Messages[0].Content)
+	}
 	if provider.receivedInput.Messages[1].Role != "system" {
 		t.Fatalf("expected second provider message to be system prompt, got %q", provider.receivedInput.Messages[1].Role)
 	}
-	if provider.receivedInput.Messages[1].Content == "" {
-		t.Fatal("expected knowledge base system prompt to be populated")
+	if !strings.Contains(provider.receivedInput.Messages[1].Content, "检索到的上下文") {
+		t.Fatalf("expected knowledge base system prompt to be populated, got %q", provider.receivedInput.Messages[1].Content)
 	}
 }
 
@@ -299,7 +316,7 @@ func TestSendMessageStreamFallsBackWhenKnowledgeBaseHasNoHits(t *testing.T) {
 
 	service := NewServiceWithRAG(repo, retriever, provider, ServiceConfig{
 		DefaultModel:       "deepseek-chat",
-		SystemPrompt:       "You are a helpful assistant.",
+		SystemPrompt:       "你是课程设计知识库问答助手。",
 		RequestTimeout:     10 * time.Second,
 		MaxHistoryMessages: 8,
 	})
@@ -395,7 +412,7 @@ func TestRegenerateMessageStreamOverwritesAssistantMessage(t *testing.T) {
 
 	service := NewServiceWithRAG(repo, retriever, provider, ServiceConfig{
 		DefaultModel:       "deepseek-chat",
-		SystemPrompt:       "You are a helpful assistant.",
+		SystemPrompt:       "你是课程设计知识库问答助手。",
 		RequestTimeout:     10 * time.Second,
 		MaxHistoryMessages: 8,
 	})
@@ -442,7 +459,7 @@ func TestStopStreamCancelsActiveGeneration(t *testing.T) {
 	stream := &recordingStream{}
 	service := NewServiceWithRAG(repo, nil, provider, ServiceConfig{
 		DefaultModel:       "deepseek-chat",
-		SystemPrompt:       "You are a helpful assistant.",
+		SystemPrompt:       "你是课程设计知识库问答助手。",
 		RequestTimeout:     10 * time.Second,
 		MaxHistoryMessages: 8,
 	})

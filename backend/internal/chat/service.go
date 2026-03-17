@@ -41,6 +41,7 @@ type ServiceConfig struct {
 	RequestTimeout     time.Duration
 	MaxHistoryMessages int
 	Temperature        float64
+	Now                func() time.Time
 }
 
 func NewService(repo chatRepository, provider Provider, cfg ServiceConfig) *Service {
@@ -53,6 +54,9 @@ func NewServiceWithRAG(repo chatRepository, ragService ragRetriever, provider Pr
 	}
 	if cfg.MaxHistoryMessages <= 0 {
 		cfg.MaxHistoryMessages = 12
+	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
 	}
 	if provider == nil {
 		provider = &DisabledProvider{reason: "chat provider is not configured"}
@@ -393,7 +397,7 @@ func (s *Service) retrieveKnowledgeContext(ctx context.Context, session Session,
 
 func (s *Service) buildProviderMessages(session Session, history []Message, userMessage Message, retrieval rag.RetrievalResult) []ProviderMessage {
 	items := make([]ProviderMessage, 0, len(history)+4)
-	if systemPrompt := strings.TrimSpace(s.cfg.SystemPrompt); systemPrompt != "" {
+	if systemPrompt := buildRuntimeSystemPrompt(s.cfg.SystemPrompt, s.cfg.Now()); systemPrompt != "" {
 		items = append(items, ProviderMessage{
 			Role:    "system",
 			Content: systemPrompt,
@@ -435,6 +439,36 @@ func (s *Service) buildProviderMessages(session Session, history []Message, user
 	return items
 }
 
+func buildRuntimeSystemPrompt(basePrompt string, now time.Time) string {
+	basePrompt = strings.TrimSpace(basePrompt)
+	if basePrompt == "" {
+		return ""
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+
+	utcNow := now.UTC()
+	localName, localOffsetSeconds := now.Zone()
+	if strings.TrimSpace(localName) == "" {
+		localName = "Local"
+	}
+
+	var builder strings.Builder
+	builder.WriteString(basePrompt)
+	builder.WriteString("\n\n以下时间信息由系统提供。遇到“今天、明天、当前、最近、本周、本月、截至现在”等相对时间表达时，必须以这些时间为准进行理解，必要时写出绝对日期时间。\n")
+	builder.WriteString("当前 UTC 时间：")
+	builder.WriteString(utcNow.Format(time.RFC3339))
+	builder.WriteString("\n")
+	builder.WriteString("当前服务端本地时间（")
+	builder.WriteString(localName)
+	builder.WriteString("，UTC")
+	builder.WriteString(formatUTCOffset(localOffsetSeconds))
+	builder.WriteString("）：")
+	builder.WriteString(now.Format(time.RFC3339))
+	return builder.String()
+}
+
 func buildKnowledgeBaseSystemPrompt(session Session, retrieval rag.RetrievalResult) string {
 	if session.KnowledgeBaseID == nil {
 		return ""
@@ -442,19 +476,19 @@ func buildKnowledgeBaseSystemPrompt(session Session, retrieval rag.RetrievalResu
 
 	var builder strings.Builder
 	if retrieval.Grounded && len(retrieval.Chunks) > 0 {
-		builder.WriteString("This session is linked to a knowledge base. Use the retrieved context below as the primary source of truth when it is relevant.\n")
-		builder.WriteString("If the context is insufficient, say that briefly and then continue with the best general answer without inventing citations.\n")
+		builder.WriteString("当前会话已绑定知识库。若下面的检索上下文与用户问题相关，请优先依据这些上下文作答。\n")
+		builder.WriteString("如果检索上下文不足以完整回答，请先简要说明信息不足，再基于通用知识补充回答；不要把补充内容伪装成知识库事实，也不要编造引用。\n")
 		if session.KnowledgeBaseName != nil && strings.TrimSpace(*session.KnowledgeBaseName) != "" {
-			builder.WriteString("Knowledge base: ")
+			builder.WriteString("知识库：")
 			builder.WriteString(strings.TrimSpace(*session.KnowledgeBaseName))
 			builder.WriteString("\n")
 		}
 		if retrieval.PromptTemplate != nil && strings.TrimSpace(*retrieval.PromptTemplate) != "" {
-			builder.WriteString("\nKnowledge-base instructions:\n")
+			builder.WriteString("\n知识库补充要求：\n")
 			builder.WriteString(strings.TrimSpace(*retrieval.PromptTemplate))
 			builder.WriteString("\n")
 		}
-		builder.WriteString("\nRetrieved context:\n")
+		builder.WriteString("\n检索到的上下文：\n")
 		for _, chunk := range retrieval.Chunks {
 			builder.WriteString(formatRetrievedChunk(chunk))
 			builder.WriteString("\n")
@@ -462,10 +496,10 @@ func buildKnowledgeBaseSystemPrompt(session Session, retrieval rag.RetrievalResu
 		return strings.TrimSpace(builder.String())
 	}
 
-	builder.WriteString("This session is linked to a knowledge base, but retrieval did not return relevant context for the latest user message.\n")
-	builder.WriteString("Answer as a general assistant. Do not claim that the answer is grounded in the knowledge base and do not invent citations.")
+	builder.WriteString("当前会话已绑定知识库，但本轮没有检索到足够相关的上下文。\n")
+	builder.WriteString("请按通用助手回答，不要声称答案来自该知识库，也不要编造引用。")
 	if session.KnowledgeBaseName != nil && strings.TrimSpace(*session.KnowledgeBaseName) != "" {
-		builder.WriteString("\nKnowledge base: ")
+		builder.WriteString("\n知识库：")
 		builder.WriteString(strings.TrimSpace(*session.KnowledgeBaseName))
 	}
 	return builder.String()
@@ -475,11 +509,23 @@ func formatRetrievedChunk(chunk rag.RetrievedChunk) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("[%d] %s", chunk.Citation.Rank, chunk.Citation.DocumentName))
 	if chunk.Citation.SourcePage != nil {
-		builder.WriteString(fmt.Sprintf(" (page %d)", *chunk.Citation.SourcePage))
+		builder.WriteString(fmt.Sprintf("（第 %d 页）", *chunk.Citation.SourcePage))
 	}
 	builder.WriteString("\n")
 	builder.WriteString(strings.TrimSpace(chunk.Content))
 	return builder.String()
+}
+
+func formatUTCOffset(offsetSeconds int) string {
+	sign := "+"
+	if offsetSeconds < 0 {
+		sign = "-"
+		offsetSeconds = -offsetSeconds
+	}
+
+	hours := offsetSeconds / 3600
+	minutes := (offsetSeconds % 3600) / 60
+	return fmt.Sprintf("%s%02d:%02d", sign, hours, minutes)
 }
 
 func buildCitationInputs(chunks []rag.RetrievedChunk) []CreateCitationInput {

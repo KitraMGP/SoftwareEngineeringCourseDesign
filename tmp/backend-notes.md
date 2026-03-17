@@ -218,6 +218,20 @@
   - 文档：`7a0e7983-c446-42c8-8ae1-c769efe02c8b`
   - reindex 任务：`a3188b85-4b77-4981-a46d-1de4b2995c7d`
   - 轮询状态：`pending -> pending -> pending -> pending -> pending -> succeeded`
+
+## 2026-03-17 Prompt 调整
+
+- 已将聊天默认系统提示词改为中文基线版本，不再使用 `You are a helpful assistant.`
+- 聊天请求组装时现在会自动注入运行时日期时间信息：
+  - 当前 UTC 时间
+  - 当前服务端本地时间、时区名和 UTC 偏移
+- 知识库相关的 system prompt 已改为中文，明确：
+  - 命中检索时优先依据检索上下文回答
+  - 上下文不足时可补充通用回答，但不得伪装成知识库事实
+  - 未命中检索时不得声称答案来自知识库，也不得编造引用
+- 已同步更新 `backend/.env.example` 中的 `AI_CHAT_SYSTEM_PROMPT`
+- 本轮验证已通过：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
   - 数据库确认该文档已有 `2` 条 `document_ingest` 任务记录，最终文档状态仍为 `available`
 
 ## 2026-03-13 OpenAPI 同步
