@@ -20,6 +20,7 @@ import (
 	"backend/internal/platform/db"
 	"backend/internal/platform/httpx"
 	"backend/internal/platform/storage"
+	"backend/internal/providerconfig"
 	"backend/internal/rag"
 	"backend/internal/task"
 
@@ -57,6 +58,8 @@ func main() {
 	accountService := account.NewService(accountRepo, tokenManager)
 	accountHandler := account.NewHandler(accountService, cfg.Auth)
 
+	providerConfigRepo := providerconfig.NewRepository(pool)
+	providerConfigManager := providerconfig.NewManager(providerConfigRepo, cfg.AI)
 	taskRepo := task.NewRepository(pool)
 	taskService := task.NewService(taskRepo)
 	storageService, err := storage.NewFromConfig(cfg.Storage)
@@ -64,7 +67,7 @@ func main() {
 		logger.Error("failed to initialize storage", slog.Any("error", err))
 		os.Exit(1)
 	}
-	embeddingProvider := model.NewEmbeddingProvider(cfg.AI)
+	embeddingProvider := model.NewDynamicEmbeddingProvider(cfg.AI, providerConfigManager.ResolveEmbeddingAPIKey)
 	ragService := rag.NewService(rag.NewRepository(pool), embeddingProvider, rag.ServiceConfig{
 		MaxContextChunks: cfg.AI.RAGMaxContextChunks,
 	})
@@ -72,7 +75,7 @@ func main() {
 	chatService := chat.NewServiceWithRAG(
 		chatRepo,
 		ragService,
-		chat.NewProvider(cfg.AI),
+		chat.NewDynamicProvider(cfg.AI, providerConfigManager.ResolveChatAPIKey),
 		chat.ServiceConfig{
 			DefaultModel:       cfg.AI.DefaultChatModel,
 			SystemPrompt:       cfg.AI.SystemPrompt,
@@ -84,7 +87,7 @@ func main() {
 
 	chatHandler := chat.NewHandler(chatService, cfg.AI.SSEHeartbeatInterval)
 	kbHandler := kb.NewHandler(kb.NewService(kb.NewRepository(pool), taskService, storageService, cfg.Storage.MaxUploadBytes))
-	adminHandler := admin.NewHandler(admin.NewService(admin.NewRepository(pool)))
+	adminHandler := admin.NewHandler(admin.NewService(admin.NewRepository(pool), providerConfigManager))
 
 	router := chi.NewRouter()
 	router.Use(httpx.RequestID)

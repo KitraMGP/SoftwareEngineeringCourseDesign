@@ -12,6 +12,7 @@ import (
 	"backend/internal/platform/config"
 	"backend/internal/platform/db"
 	"backend/internal/platform/storage"
+	"backend/internal/providerconfig"
 	"backend/internal/task"
 	"backend/internal/worker"
 )
@@ -39,12 +40,14 @@ func main() {
 	taskRepo := task.NewRepository(pool)
 	taskService := task.NewService(taskRepo)
 	kbRepo := kb.NewRepository(pool)
+	providerConfigRepo := providerconfig.NewRepository(pool)
+	providerConfigManager := providerconfig.NewManager(providerConfigRepo, cfg.AI)
 	storageService, err := storage.NewFromConfig(cfg.Storage)
 	if err != nil {
 		logger.Error("failed to initialize storage", slog.Any("error", err))
 		os.Exit(1)
 	}
-	embeddingProvider := model.NewEmbeddingProvider(cfg.AI)
+	embeddingProvider := model.NewDynamicEmbeddingProvider(cfg.AI, providerConfigManager.ResolveEmbeddingAPIKey)
 
 	worker := worker.New(logger, taskService, kbRepo, storageService, embeddingProvider, cfg.AI.EmbeddingTimeout, cfg.Task.PollInterval)
 

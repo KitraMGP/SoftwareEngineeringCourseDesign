@@ -219,6 +219,18 @@
   - 未绑定知识库的空会话 SSE 问答
   - 知识库 CRUD
 
+## 2026-03-19 品牌名定稿同步
+
+- 已将前端产品名占位统一替换为 `流光问答`
+- 已将前端助手名占位统一替换为 `流光`
+- 已同步更新用户端 / 管理端 HTML 标题与前端设计文档中的命名说明
+
+## 2026-03-19 关于页文案调整
+
+- 已更新用户端关于页底部深色信息条
+- 已移除 `Workspace` 和 `Account` 栏位
+- 已新增“HNUST 23计科四班课程设计团队精心打造”说明与 `CREATORS` 成员名单
+
 ## 2026-03-16 知识库页提示文案清理
 
 - 已删除知识库列表页和知识库详情页中不必要的“实现说明 / 当前后端限制 / 设计理由”类提示文案
@@ -806,3 +818,33 @@
 - 浏览器 MCP 已完成同页切换回归：
   - 普通用户 `cachefixuser0316` 登录后可看到其测试知识库 `Cache Scope KB`
   - 退出后在同一标签页登录管理员 `admin / 12345678abc`，知识库抽屉恢复为空列表
+
+## 2026-03-19 管理端 API Key 编辑补齐
+
+### 本轮实现
+
+- 已更新共享层管理端 provider 类型与请求：
+  - `packages/shared/src/types/domain.ts`
+  - `packages/shared/src/api/admin.ts`
+  - `ProviderConfig` 新增 `api_key_source`
+  - `created_at / updated_at / id` 改为可空，以兼容“仅由当前运行配置合成、尚未落库”的 provider 行
+- 已将管理端“模型配置”页改为支持 API key 覆盖写入：
+  - `apps/admin/src/modules/providers/pages/ProvidersPage.vue`
+  - 页面已收敛为单一默认 provider：`DeepSeek`
+  - 配置来源展示改为：`.env / 数据库 / 未配置`
+  - 编辑通过弹窗完成，输入框始终为空，不回显旧 key
+  - 页面显式提示：系统会优先读取 `.env`，只有 `.env` 未提供时才回退读取数据库
+  - 因此当 `.env` 已提供 `DEEPSEEK_API_KEY` 时，页面会直接视为已配置
+- 顺手清理了前端现存 lint 问题，避免本轮验收被历史问题阻塞：
+  - `apps/admin/src/modules/users/pages/UsersPage.vue`
+  - `apps/user/src/modules/chat/pages/SessionPage.vue`
+  - `packages/shared/src/types/domain.ts`
+
+### 本轮测试
+
+- 已完成：
+  - `cd frontend && pnpm lint`
+  - `cd frontend && pnpm build`
+- 当前未做浏览器 MCP 的最终页面点击验收，原因是本机 `:8080` 上仍是旧 API 进程：
+  - 旧进程的 `GET /api/v1/admin/provider-configs` 仍返回空列表
+  - 需要用户重启 API（以及如需验证数据库后备读取则一并重启 worker）后，再在管理端页面验证新的 DeepSeek 单卡片与编辑弹窗

@@ -56,6 +56,12 @@ export const adminApi = {
     ).items;
   },
 
+  async updateProviderApiKey(provider: string, payload: { api_key: string }) {
+    return unwrapData<ProviderConfig>(
+      await apiClient.put(`/admin/provider-configs/${provider}`, payload)
+    );
+  },
+
   async listSystemSettings() {
     return unwrapData<{ items: SystemSetting[] }>(await apiClient.get('/admin/settings')).items;
   },

@@ -194,7 +194,7 @@ export interface AdminOverview {
   failed_task_count: number;
 }
 
-export interface AdminUser extends User {}
+export type AdminUser = User;
 
 export interface AdminTask {
   id: string;
@@ -216,15 +216,16 @@ export interface AdminTask {
 }
 
 export interface ProviderConfig {
-  id: string;
+  id?: string | null;
   provider: string;
   base_url: string;
   default_chat_model: string;
   default_embedding_model: string;
   is_enabled: boolean;
   has_api_key: boolean;
-  created_at: string;
-  updated_at: string;
+  api_key_source: 'database' | 'environment' | 'missing';
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface SystemSetting {

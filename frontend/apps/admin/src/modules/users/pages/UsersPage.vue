@@ -95,7 +95,7 @@ function getRoleLabel(userRole: AdminUser['role']) {
   return userRole === 'admin' ? '管理员' : '普通用户';
 }
 
-function isMutating(userId: string) {
+function isMutating() {
   return freezeMutation.isPending.value || unfreezeMutation.isPending.value || false;
 }
 
@@ -229,7 +229,7 @@ async function handleToggleStatus(item: AdminUser) {
                   ? 'bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:bg-slate-100 disabled:text-slate-400'
                   : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 disabled:bg-slate-100 disabled:text-slate-400'
               "
-              :disabled="isMutating(row.id) || row.id === authStore.user?.id"
+              :disabled="isMutating() || row.id === authStore.user?.id"
               @click="handleToggleStatus(row)"
             >
               {{ row.status === 'active' ? '冻结' : '恢复' }}

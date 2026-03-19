@@ -77,15 +77,16 @@ type ListTasksParams struct {
 }
 
 type ProviderConfig struct {
-	ID                    uuid.UUID `json:"id"`
-	Provider              string    `json:"provider"`
-	BaseURL               string    `json:"base_url"`
-	DefaultChatModel      string    `json:"default_chat_model"`
-	DefaultEmbeddingModel string    `json:"default_embedding_model"`
-	IsEnabled             bool      `json:"is_enabled"`
-	HasAPIKey             bool      `json:"has_api_key"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	ID                    *uuid.UUID `json:"id,omitempty"`
+	Provider              string     `json:"provider"`
+	BaseURL               string     `json:"base_url"`
+	DefaultChatModel      string     `json:"default_chat_model"`
+	DefaultEmbeddingModel string     `json:"default_embedding_model"`
+	IsEnabled             bool       `json:"is_enabled"`
+	HasAPIKey             bool       `json:"has_api_key"`
+	APIKeySource          string     `json:"api_key_source"`
+	CreatedAt             *time.Time `json:"created_at,omitempty"`
+	UpdatedAt             *time.Time `json:"updated_at,omitempty"`
 }
 
 type SystemSetting struct {

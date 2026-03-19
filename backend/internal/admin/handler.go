@@ -14,6 +14,10 @@ type Handler struct {
 	service *Service
 }
 
+type updateProviderAPIKeyRequest struct {
+	APIKey string `json:"api_key"`
+}
+
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
@@ -27,7 +31,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/users/{userId}/freeze", httpx.Adapt(h.FreezeUser))
 	r.Post("/users/{userId}/unfreeze", httpx.Adapt(h.UnfreezeUser))
 	r.Get("/provider-configs", httpx.Adapt(h.ListProviderConfigs))
-	r.Put("/provider-configs/{provider}", httpx.Adapt(h.notImplemented("provider config management")))
+	r.Put("/provider-configs/{provider}", httpx.Adapt(h.UpdateProviderAPIKey))
 	r.Get("/settings", httpx.Adapt(h.ListSystemSettings))
 	r.Put("/settings", httpx.Adapt(h.notImplemented("system settings management")))
 	r.Get("/tasks", httpx.Adapt(h.ListTasks))
@@ -143,6 +147,26 @@ func (h *Handler) ListProviderConfigs(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 	httpx.Success(w, http.StatusOK, map[string]any{"items": items})
+	return nil
+}
+
+func (h *Handler) UpdateProviderAPIKey(w http.ResponseWriter, r *http.Request) error {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		return httpx.Unauthorized("missing auth context")
+	}
+
+	var req updateProviderAPIKeyRequest
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		return err
+	}
+
+	item, err := h.service.UpdateProviderAPIKey(r.Context(), principal, chi.URLParam(r, "provider"), req.APIKey)
+	if err != nil {
+		return err
+	}
+
+	httpx.Success(w, http.StatusOK, item)
 	return nil
 }
 

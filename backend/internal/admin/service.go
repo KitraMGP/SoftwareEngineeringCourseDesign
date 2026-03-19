@@ -9,16 +9,21 @@ import (
 	"backend/internal/account"
 	"backend/internal/platform/auth"
 	"backend/internal/platform/httpx"
+	"backend/internal/providerconfig"
 
 	"github.com/google/uuid"
 )
 
 type Service struct {
-	repo *Repository
+	repo            *Repository
+	providerConfigs *providerconfig.Manager
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, providerConfigs *providerconfig.Manager) *Service {
+	return &Service{
+		repo:            repo,
+		providerConfigs: providerConfigs,
+	}
 }
 
 func (s *Service) GetOverview(ctx context.Context) (*Overview, error) {
@@ -98,11 +103,64 @@ func (s *Service) RetryTask(ctx context.Context, actor auth.Principal, taskID uu
 }
 
 func (s *Service) ListProviderConfigs(ctx context.Context) ([]ProviderConfig, error) {
-	items, err := s.repo.ListProviderConfigs(ctx)
+	items, err := s.providerConfigs.List(ctx)
 	if err != nil {
 		return nil, httpx.Internal("failed to list provider configs").WithErr(err)
 	}
-	return items, nil
+
+	result := make([]ProviderConfig, 0, len(items))
+	for _, item := range items {
+		result = append(result, ProviderConfig{
+			ID:                    item.ID,
+			Provider:              item.Provider,
+			BaseURL:               item.BaseURL,
+			DefaultChatModel:      item.DefaultChatModel,
+			DefaultEmbeddingModel: item.DefaultEmbeddingModel,
+			IsEnabled:             item.IsEnabled,
+			HasAPIKey:             item.HasAPIKey,
+			APIKeySource:          item.APIKeySource,
+			CreatedAt:             item.CreatedAt,
+			UpdatedAt:             item.UpdatedAt,
+		})
+	}
+	return result, nil
+}
+
+func (s *Service) UpdateProviderAPIKey(ctx context.Context, actor auth.Principal, provider, apiKey string) (*ProviderConfig, error) {
+	item, err := s.providerConfigs.UpdateAPIKey(ctx, provider, apiKey)
+	if err != nil {
+		if appErr, ok := httpx.AsAppError(err); ok {
+			return nil, appErr
+		}
+		return nil, httpx.Internal("failed to update provider config").WithErr(err)
+	}
+
+	metadata := formatMetadata(map[string]any{
+		"provider":       item.Provider,
+		"api_key_source": item.APIKeySource,
+		"has_api_key":    item.HasAPIKey,
+	})
+	_ = s.repo.CreateAuditLog(ctx, CreateAuditLogInput{
+		ActorUserID:  &actor.UserID,
+		ActorRole:    actor.Role,
+		Action:       "admin.provider.update",
+		ResourceType: stringPtr("provider_config"),
+		Result:       "success",
+		Metadata:     metadata,
+	})
+
+	return &ProviderConfig{
+		ID:                    item.ID,
+		Provider:              item.Provider,
+		BaseURL:               item.BaseURL,
+		DefaultChatModel:      item.DefaultChatModel,
+		DefaultEmbeddingModel: item.DefaultEmbeddingModel,
+		IsEnabled:             item.IsEnabled,
+		HasAPIKey:             item.HasAPIKey,
+		APIKeySource:          item.APIKeySource,
+		CreatedAt:             item.CreatedAt,
+		UpdatedAt:             item.UpdatedAt,
+	}, nil
 }
 
 func (s *Service) ListSystemSettings(ctx context.Context) ([]SystemSetting, error) {

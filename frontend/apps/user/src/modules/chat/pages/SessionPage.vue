@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useQuery, useQueryClient } from '@tanstack/vue-query';
-import { ArrowRight } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -9,7 +8,6 @@ import {
   AppStatusBadge,
   DEFAULT_CHAT_MODEL,
   EmptyStatePanel,
-  SurfaceCard,
   chatApi,
   formatDateTime,
   queryKeys,
@@ -54,7 +52,6 @@ const sessionQuery = useQuery({
 
 const session = computed(() => sessionQuery.data.value?.session || null);
 const canSendMessage = computed(() => !!session.value);
-const isKnowledgeBoundSession = computed(() => !!session.value?.knowledge_base_id);
 const isStreaming = computed(() => !!activeStream.value);
 const regeneratingMessageId = computed(() =>
   activeStream.value?.kind === 'regenerate' ? activeStream.value.assistantMessage.id : null
@@ -350,18 +347,15 @@ async function handleStopStream() {
   }
 }
 
-watch(
-  sessionId,
-  (nextSessionId, previousSessionId) => {
-    if (previousSessionId && nextSessionId !== previousSessionId) {
-      streamAbortController.value?.abort();
-      streamAbortController.value = null;
-      activeStream.value = null;
-      isStopPending.value = false;
-      draftInput.value = '';
-    }
+watch(sessionId, (nextSessionId, previousSessionId) => {
+  if (previousSessionId && nextSessionId !== previousSessionId) {
+    streamAbortController.value?.abort();
+    streamAbortController.value = null;
+    activeStream.value = null;
+    isStopPending.value = false;
+    draftInput.value = '';
   }
-);
+});
 
 onBeforeUnmount(() => {
   streamAbortController.value?.abort();
@@ -395,7 +389,8 @@ onBeforeUnmount(() => {
               </AppStatusBadge>
             </div>
             <p class="mt-2 text-sm leading-6 text-slate-500">
-              创建于 {{ formatDateTime(session?.created_at) }}，模型标识为 {{ session?.model || DEFAULT_CHAT_MODEL }}。
+              创建于 {{ formatDateTime(session?.created_at) }}，模型标识为
+              {{ session?.model || DEFAULT_CHAT_MODEL }}。
             </p>
           </div>
 
@@ -405,7 +400,9 @@ onBeforeUnmount(() => {
               class="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               @click="chatUiStore.openKnowledgeBaseDrawer()"
             >
-              {{ session?.knowledge_base_id ? '换一个知识库开始新会话' : '为下一次会话选择知识库' }}
+              {{
+                session?.knowledge_base_id ? '换一个知识库开始新会话' : '为下一次会话选择知识库'
+              }}
             </button>
           </div>
         </div>

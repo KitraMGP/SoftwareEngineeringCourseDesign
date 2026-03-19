@@ -609,3 +609,34 @@
   - `POST /api/v1/admin/users/{userId}/freeze`
   - `POST /api/v1/admin/users/{userId}/unfreeze`
   - 两次操作均成功，且审计日志写入正常
+
+## 2026-03-19 管理后台 API Key 配置补齐
+
+### 本轮实现
+
+- 已新增 `backend/internal/providerconfig/`：
+  - 统一封装 `provider_configs` 表读写
+  - `GET /admin/provider-configs` 现固定只返回默认 provider：`DeepSeek`
+  - 返回仅暴露 `has_api_key` 与 `api_key_source(environment/database/missing)`，不回显真实 key
+- 已将 `PUT /api/v1/admin/provider-configs/{provider}` 从 `feature_not_ready` 改为真实实现：
+  - 请求体仅接受 `api_key`
+  - 必须重新输入非空 key 才能覆盖
+  - 不支持读取旧值或回显旧值
+  - 更新后写入 `admin.provider.update` 审计日志
+- 已将 API 与 worker 的 provider key 解析改为“`.env` 优先，数据库后备”：
+  - 聊天链路：`backend/internal/chat/dynamic_provider.go`
+  - embedding 链路：`backend/internal/model/dynamic_provider.go`
+  - 若 `.env` 中已提供 key，则直接视为已配置并优先使用
+  - 仅当 `.env` 未提供 key 时，才回退读取数据库中的 key
+  - 若两者都无 key，则仍按 misconfigured 返回，需在管理后台补配置
+- 当前后端仍未实现“后台编辑 base url / 默认模型 / enable 状态”；本轮只补 API key 覆盖写入，满足当前诉求
+
+### 本轮验证
+
+- 已完成：
+  - `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- 已对本机现有 `127.0.0.1:8080` 做只读冒烟：
+  - `GET /api/v1/healthz` 返回 `200`
+  - 使用管理员 `admin / 12345678abc` 登录成功
+  - 当前运行中的旧 API 进程 `GET /api/v1/admin/provider-configs` 仍返回空列表，说明需要重启 API 才会加载本轮新逻辑
+- 本轮未直接调用 `PUT /api/v1/admin/provider-configs/{provider}` 做在线写入验证，避免把测试 key 写入用户当前数据库
