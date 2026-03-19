@@ -14,10 +14,12 @@ const quickSteps = [
   '在会话中继续提问与追问。'
 ];
 
+const creators = '解子敬，贺博，赵登智，曾思耀，官柱天';
+
 const faqs = [
   {
     question: '如何开始使用？',
-    answer: '先登录，再根据资料主题创建知识库，随后从会话页面开始提问。'
+    answer: '根据资料主题创建知识库，随后从会话页面开始提问。'
   },
   {
     question: '什么时候适合使用知识库？',
@@ -44,7 +46,7 @@ const faqs = [
           <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Product intro</p>
           <h2 class="mt-4 font-serif text-3xl text-slate-900">{{ ASSISTANT_NAME }}</h2>
           <p class="mt-4 text-sm leading-7 text-slate-500">
-            {{ PRODUCT_NAME }} 让会话、知识库与个人工作区保持在同一套界面里，方便持续整理资料和追踪问题。
+            我们将会话、知识库与个人工作区融为一体，帮助你高效整理资料和开展研究。
           </p>
         </SurfaceCard>
 
@@ -82,15 +84,15 @@ const faqs = [
             <p class="mt-3 text-xl font-semibold text-white">{{ BUILD_VERSION }}</p>
           </div>
           <div>
-            <p class="text-xs uppercase tracking-[0.3em] text-white/45">Workspace</p>
+            <p class="text-xs uppercase tracking-[0.3em] text-white/45">Made by</p>
             <p class="mt-3 text-sm leading-6 text-white/76">
-              在会话和知识库之间切换工作，并持续追踪资料与提问。
+              由HNUST 23计科四班课程设计团队精心打造
             </p>
           </div>
           <div>
-            <p class="text-xs uppercase tracking-[0.3em] text-white/45">Account</p>
+            <p class="text-xs uppercase tracking-[0.3em] text-white/45">CREATORS</p>
             <p class="mt-3 text-sm leading-6 text-white/76">
-              在个人资料和安全设置中统一维护账户信息。
+              {{ creators }}
             </p>
           </div>
         </div>
